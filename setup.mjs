@@ -2,6 +2,8 @@
 // node setup.mjs user [--local-project <dir>]...        PC마다 한 번
 // node setup.mjs project <dir> [--gitlab] [--expo] [--frontend] [--force]
 // node setup.mjs check
+// node setup.mjs skills <list|add|remove|on|off|status> ...   스킬 세트 (kit/user/skill-sets.mjs)
+// node setup.mjs stats | dashboard [--port 4178]              스킬 사용 통계·대시보드 (kit/user/skill-stats.mjs)
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -16,6 +18,10 @@ const USER_SETTINGS = path.join(CLAUDE, 'settings.json');
 const POLICY_DIR = path.join(CLAUDE, 'skill-policy');
 const POLICY_SCRIPT = path.join(POLICY_DIR, 'skill-policy.mjs');
 const POLICY_FILE = path.join(POLICY_DIR, 'policy.json');
+const SKILL_SETS = path.join(KIT, 'user', 'skill-sets.mjs');
+const SKILL_STATS = path.join(KIT, 'user', 'skill-stats.mjs');
+// Template-owned files copied to ~/.claude/skill-policy/ on every `user` run.
+const USER_KIT_FILES = ['skill-sets.mjs', 'skill-sets.json', 'skill-inventory.mjs', 'skill-agents.mjs', 'skill-stats.mjs', 'skill-dashboard.html', 'skill-meta.json'];
 
 const exists = (p) => fs.existsSync(p);
 // Windows PowerShell writes UTF-8 with a BOM.
@@ -66,7 +72,10 @@ function mergeHooks(target = {}, extra = {}) {
 function setupUser(multi) {
   fs.mkdirSync(POLICY_DIR, { recursive: true });
   fs.copyFileSync(path.join(KIT, 'user', 'skill-policy.mjs'), POLICY_SCRIPT);
-  log(`installed ${POLICY_SCRIPT}`);
+  // Template-owned files are refreshed on every run; policy.json and state.json are the user's.
+  for (const f of USER_KIT_FILES) fs.copyFileSync(path.join(KIT, 'user', f), path.join(POLICY_DIR, f));
+  fs.cpSync(path.join(KIT, 'user', 'skills'), path.join(CLAUDE, 'skills'), { recursive: true });
+  log(`installed ${POLICY_SCRIPT}, ${USER_KIT_FILES.join(', ')}, ~/.claude/skills/skill-sets`);
 
   const policy = exists(POLICY_FILE) ? readJson(POLICY_FILE) : readJson(path.join(KIT, 'user', 'policy.json'));
   if (!exists(POLICY_FILE)) log(`created ${POLICY_FILE} (edit it to change the policy)`);
@@ -203,8 +212,11 @@ try {
   if (command === 'user') setupUser(multi);
   else if (command === 'project') setupProject(positional[0], flags);
   else if (command === 'check') log(run('node', [POLICY_SCRIPT, '--check'], { shell: false }).out);
+  else if (command === 'skills') process.exitCode = spawnSync('node', [SKILL_SETS, ...rest], { stdio: 'inherit' }).status ?? 1;
+  else if (command === 'stats') process.exitCode = spawnSync('node', [SKILL_STATS, 'collect', ...rest], { stdio: 'inherit' }).status ?? 1;
+  else if (command === 'dashboard') process.exitCode = spawnSync('node', [SKILL_STATS, 'serve', ...rest], { stdio: 'inherit' }).status ?? 1;
   else {
-    log('usage:\n  node setup.mjs user [--local-project <dir>]...\n  node setup.mjs project <dir> [--gitlab] [--expo] [--frontend] [--force]\n  node setup.mjs check');
+    log('usage:\n  node setup.mjs user [--local-project <dir>]...\n  node setup.mjs project <dir> [--gitlab] [--expo] [--frontend] [--force]\n  node setup.mjs check\n  node setup.mjs skills <list|add|remove|on|off|status> ...\n  node setup.mjs stats [--project <dir>] [--exact]\n  node setup.mjs dashboard [--port 4178] [--project <dir>]');
     process.exitCode = 1;
   }
 } catch (e) {

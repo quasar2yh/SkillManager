@@ -1,0 +1,2269 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skill dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect x='1' y='12' width='4' height='9' rx='1' fill='%23b35c08'/%3E%3Crect x='7' y='7' width='4' height='14' rx='1' fill='%23b35c08'/%3E%3Crect x='13' y='3' width='4' height='18' rx='1' fill='%230a766c'/%3E%3C/svg%3E">
+<style>
+  /* ---------- tokens ---------- */
+  /* Cost colors carry one meaning everywhere: amber = every request, teal = only when called.
+     Agent colors are a separate categorical set (validated for CVD, adjacent order claude→codex→gemini→copilot). */
+  :root {
+    --paper: #f3f4f7; --surface: #ffffff; --raised: #f8f9fb; --ink: #14161b; --ink-2: #3a404c; --muted: #5b6270; --faint: #8a919e;
+    --line: #e2e5ea; --line-2: #cfd4dc; --accent: #2f4bc0; --accent-soft: #e8ecfb;
+    --always: #b35c08; --always-soft: #fbead6; --always-hatch: #e7b77f;
+    --onuse: #0a766c; --onuse-soft: #dbf1ed;
+    --warn: #b8392d; --warn-soft: #fbe3df;
+    --bar: #c8cdd6; --bar-2: #e4e7ec;
+    --ag-claude: #2a78d6; --ag-codex: #e87ba4; --ag-gemini: #4a3aa7; --ag-copilot: #008300;
+    --shadow: 0 1px 2px rgb(20 22 27 / .06), 0 8px 24px rgb(20 22 27 / .08);
+    --font: "Pretendard Variable", "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --mono: "JetBrains Mono", "Cascadia Mono", "D2Coding", Consolas, ui-monospace, monospace;
+    --fs-xs: 12.5px; --fs-sm: 13.5px; --fs-base: 15px; --fs-md: 17px; --fs-lg: 21px; --fs-xl: 30px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0d0f13; --surface: #15181e; --raised: #1a1e25; --ink: #e9ebf0; --ink-2: #c4c9d2; --muted: #9ba2af; --faint: #6f7683;
+      --line: #252a33; --line-2: #343a46; --accent: #9aabff; --accent-soft: #1d2441;
+      --always: #f2a54e; --always-soft: #3a2913; --always-hatch: #8c5b25;
+      --onuse: #3fc4b5; --onuse-soft: #12302c;
+      --warn: #f47c70; --warn-soft: #3b1b18;
+      --bar: #3a404b; --bar-2: #262b33;
+      --ag-claude: #3987e5; --ag-codex: #d55181; --ag-gemini: #9085e9; --ag-copilot: #008300;
+      --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 10px 28px rgb(0 0 0 / .45);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0d0f13; --surface: #15181e; --raised: #1a1e25; --ink: #e9ebf0; --ink-2: #c4c9d2; --muted: #9ba2af; --faint: #6f7683;
+    --line: #252a33; --line-2: #343a46; --accent: #9aabff; --accent-soft: #1d2441;
+    --always: #f2a54e; --always-soft: #3a2913; --always-hatch: #8c5b25;
+    --onuse: #3fc4b5; --onuse-soft: #12302c;
+    --warn: #f47c70; --warn-soft: #3b1b18;
+    --bar: #3a404b; --bar-2: #262b33;
+    --ag-claude: #3987e5; --ag-codex: #d55181; --ag-gemini: #9085e9; --ag-copilot: #008300;
+    --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 10px 28px rgb(0 0 0 / .45);
+    color-scheme: dark;
+  }
+
+  /* ---------- base ---------- */
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 84px; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: var(--fs-base)/1.65 var(--font); letter-spacing: -0.005em;
+    word-break: keep-all; overflow-wrap: anywhere;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* keep-all keeps Korean words whole; Chinese has no spaces and would never wrap. */
+  html:not(:lang(ko)) body { word-break: normal; }
+  h1, h2, h3 { margin: 0; line-height: 1.3; text-wrap: balance; letter-spacing: -0.015em; }
+  h2 { font-size: var(--fs-lg); font-weight: 700; }
+  h3 { font-size: var(--fs-md); font-weight: 650; }
+  p { margin: 0; text-wrap: pretty; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+  code, .mono { font-family: var(--mono); font-size: .92em; }
+  code { background: var(--raised); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  [hidden] { display: none !important; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .btn { border: 1px solid var(--line-2); background: var(--surface); border-radius: 8px; padding: 7px 14px; font-size: var(--fs-sm); font-weight: 600; }
+  .btn:hover:not(:disabled) { border-color: var(--ink-2); }
+  .btn:disabled, .btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+  .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .btn.primary:hover:not(:disabled) { background: var(--ink-2); }
+  .link { border: 0; background: none; padding: 0; color: var(--accent); font-size: inherit; font-weight: 600; }
+  .link:hover { text-decoration: underline; text-underline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+
+  /* ---------- top bar ---------- */
+  .topbar { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  .topbar-in { max-width: 1240px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 750; font-size: var(--fs-md); white-space: nowrap; }
+  .brand svg { flex: none; }
+  nav.pages { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+  nav.pages a { text-decoration: none; color: var(--muted); font-weight: 600; font-size: var(--fs-sm); padding: 6px 14px; border-radius: 7px; white-space: nowrap; }
+  nav.pages a[aria-current="page"] { background: var(--ink); color: var(--paper); }
+  nav.pages a:not([aria-current="page"]):hover { color: var(--ink); background: var(--raised); }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .stamp { color: var(--faint); font-size: var(--fs-xs); margin-right: 4px; }
+  .lang { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line-2); background: var(--surface); border-radius: 8px; padding: 0 4px 0 10px; color: var(--muted); }
+  .lang:focus-within { border-color: var(--accent); }
+  .lang select { border: 0; background: none; padding: 7px 6px; font-weight: 600; color: var(--ink); outline: 0; }
+  @media (max-width: 720px) {
+    .topbar { position: static; }
+    .topbar-in { gap: 10px 12px; padding: 10px 16px; }
+    .topbar-right { margin-left: 0; width: 100%; }
+    .stamp { width: 100%; order: 3; }
+    .btn { padding: 6px 11px; }
+    main { padding: 20px 16px 64px; }
+    .panel { padding: 18px 16px; }
+  }
+  .notice { max-width: 1240px; margin: 12px auto 0; padding: 0 20px; }
+  .notice p { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 10px 14px; font-size: var(--fs-sm); }
+
+  /* minmax(0, 1fr): a wide child (the agent picker, a table) scrolls inside instead of widening the page. */
+  main { max-width: 1240px; margin: 0 auto; padding: 28px 20px 80px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; min-width: 0; }
+  .panel-head { display: flex; align-items: baseline; gap: 10px 16px; flex-wrap: wrap; margin-bottom: 6px; }
+  .panel-head .aside { margin-left: auto; color: var(--muted); font-size: var(--fs-sm); }
+  .panel-head .seg-ctl { margin-left: auto; align-self: center; }
+  .lead { color: var(--muted); font-size: var(--fs-sm); max-width: 78ch; margin-bottom: 18px; }
+
+  /* info "?" button + popover, hover tooltip */
+  .info { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line-2); background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 700; line-height: 1; padding: 0; display: inline-grid; place-items: center; vertical-align: middle; flex: none; }
+  .info:hover, .info[aria-expanded="true"] { border-color: var(--ink-2); color: var(--ink); }
+  #pop, #tip { position: fixed; z-index: 50; background: var(--surface); color: var(--ink); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: var(--shadow); }
+  #pop { width: min(340px, calc(100vw - 24px)); padding: 16px 18px; font-size: var(--fs-sm); line-height: 1.65; }
+  #pop h4 { margin: 0 0 6px; font-size: var(--fs-base); }
+  #pop p + p { margin-top: 8px; }
+  #pop .more { display: inline-block; margin-top: 10px; font-weight: 600; }
+  #tip { max-width: 300px; padding: 9px 12px; font-size: var(--fs-sm); line-height: 1.55; pointer-events: none; white-space: pre-line; }
+
+  /* ---------- agent identity ---------- */
+  .adot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c, var(--faint)); flex: none; }
+  .agent-tag { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); font-weight: 650; color: var(--ink-2); white-space: nowrap; }
+  .agent-tag .adot { width: 8px; height: 8px; }
+  .pill { display: inline-block; font-size: 11.5px; font-weight: 650; color: var(--muted); border: 1px solid var(--line-2); border-radius: 999px; padding: 0 8px; line-height: 1.6; white-space: nowrap; }
+  .agentbar { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; }
+  .agentbar > span { font-size: var(--fs-sm); font-weight: 650; color: var(--ink-2); }
+  .agentbar .seg-ctl button { display: inline-flex; align-items: center; gap: 8px; }
+
+  /* ---------- board: summary ---------- */
+  .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  @media (max-width: 980px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 520px) { .summary { grid-template-columns: 1fr; } }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; display: grid; gap: 6px; align-content: start; }
+  .stat-label { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); font-weight: 650; color: var(--ink-2); }
+  .key { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .key.always { background: var(--always); }
+  .key.onuse { background: var(--onuse); }
+  .key.warn { background: var(--warn); }
+  .key.ink { background: var(--ink-2); }
+  .stat-label .info { margin-left: auto; }
+  .stat-value { display: flex; align-items: baseline; gap: 6px; }
+  .stat-value .num { font-size: var(--fs-xl); font-weight: 700; line-height: 1.1; }
+  .stat-value .unit { color: var(--muted); font-size: var(--fs-sm); }
+  .stat-multi { display: grid; gap: 4px; margin: 2px 0 2px; }
+  .stat-multi div { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; font-size: var(--fs-sm); color: var(--ink-2); }
+  .stat-multi b { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: var(--fs-md); font-weight: 700; color: var(--ink); }
+  .stat-note { color: var(--muted); font-size: var(--fs-sm); line-height: 1.55; }
+  .stat-note .link { font-size: var(--fs-sm); }
+
+  /* ---------- board: per-agent comparison ---------- */
+  table.cmp { min-width: 820px; }
+  col.a-name { width: 24%; } col.a-list { width: 17%; } col.a-calls { width: 16%; } col.a-req { width: 14%; } col.a-in { width: 15%; } col.a-share { width: 14%; }
+  table.cmp td { vertical-align: middle; padding: 14px 12px; }
+  tr.agent-row { cursor: pointer; }
+  tr.agent-row:hover td { background: var(--raised); }
+  tr.agent-row[aria-selected="true"] td { background: var(--raised); }
+  tr.agent-row[aria-selected="true"] td:first-child { box-shadow: inset 3px 0 0 var(--c); }
+  tr.agent-row.absent { cursor: default; }
+  tr.agent-row.absent td > * { opacity: .5; }
+  .ag-name { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; font-size: var(--fs-base); }
+  .ag-name b { font-weight: 700; }
+  .cell-sub { color: var(--muted); font-size: var(--fs-xs); line-height: 1.5; margin-top: 3px; }
+  .cell-bar { display: grid; gap: 5px; justify-items: end; }
+  .cell-bar .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 650; font-size: var(--fs-base); }
+  .cell-bar .track { width: 100%; height: 6px; border-radius: 3px; background: var(--bar-2); overflow: hidden; display: block; }
+  .cell-bar .track i { display: block; height: 100%; border-radius: 3px; }
+  .cmp-foot { color: var(--muted); font-size: var(--fs-xs); margin-top: 10px; }
+
+  /* ---------- board: context strip ---------- */
+  .ctx { display: grid; gap: 22px; }
+  .ctx-agent { display: grid; gap: 12px; }
+  .ctx-agent-h { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; font-size: var(--fs-sm); }
+  .ctx-agent-h b { font-size: var(--fs-base); }
+  .ctx-agent-h span { color: var(--muted); }
+  .ctx-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) 84px; gap: 16px; align-items: center; }
+  .ctx-label b { display: block; font-size: var(--fs-base); }
+  .ctx-label span { color: var(--muted); font-size: var(--fs-xs); }
+  .ctx-track { display: flex; height: 34px; gap: 2px; border-radius: 6px; overflow: hidden; background: var(--bar-2); }
+  .ctx-track.dense { gap: 1px; }
+  .ctx-seg { flex: none; min-width: 2px; height: 100%; background: var(--always); cursor: pointer; transition: filter .12s; }
+  .ctx-seg:hover { filter: brightness(1.15) saturate(1.1); }
+  .ctx-seg.idle { background: repeating-linear-gradient(135deg, var(--always-hatch) 0 4px, var(--always-soft) 4px 8px); }
+  .ctx-seg.dup { box-shadow: inset 0 -5px 0 var(--warn); }
+  .ctx-seg.base { background: var(--bar); cursor: default; display: grid; place-items: center; color: var(--ink-2); font-size: var(--fs-xs); font-weight: 600; overflow: hidden; white-space: nowrap; }
+  .ctx-seg.base:hover { filter: none; }
+  .ctx-total { text-align: right; font-size: var(--fs-md); font-weight: 700; }
+  .ctx-total small { display: block; font-family: var(--font); font-size: var(--fs-xs); font-weight: 400; color: var(--muted); letter-spacing: 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 16px; color: var(--muted); font-size: var(--fs-sm); }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .swatch { width: 22px; height: 12px; border-radius: 3px; background: var(--always); }
+  .swatch.idle { background: repeating-linear-gradient(135deg, var(--always-hatch) 0 4px, var(--always-soft) 4px 8px); }
+  .swatch.dup { box-shadow: inset 0 -4px 0 var(--warn); }
+  .swatch.base { background: var(--bar); }
+  @media (max-width: 720px) {
+    .ctx-row { grid-template-columns: 1fr auto; gap: 6px 12px; }
+    .ctx-track { grid-column: 1 / -1; order: 3; }
+  }
+
+  /* ---------- board: activity ---------- */
+  .split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; }
+  @media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+  .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .chart text { fill: var(--faint); font: 11.5px var(--mono); }
+  .chart .bar { fill: var(--onuse); }
+  .chart .bar:hover { fill: color-mix(in srgb, var(--onuse) 75%, var(--ink)); }
+  .chart .grid { stroke: var(--line); }
+  .chart .hit { fill: transparent; }
+  .chart .hit:hover { fill: color-mix(in srgb, var(--ink) 6%, transparent); }
+  .chart-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: -4px 0 12px; font-size: var(--fs-sm); color: var(--ink-2); }
+  .chart-legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .chart-legend b { font-family: var(--mono); font-weight: 650; }
+  .top { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  .top li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 12px; align-items: baseline; }
+  .top .who { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+  .top .name { font-family: var(--mono); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: none; padding: 0; text-align: left; color: var(--ink); font-weight: 600; min-width: 0; }
+  .top .name:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+  .top .track { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--bar-2); overflow: hidden; }
+  .top .track i { display: block; height: 100%; background: var(--onuse); border-radius: 5px; }
+  .top .n { text-align: right; font-size: var(--fs-sm); font-weight: 650; white-space: nowrap; }
+  .empty { color: var(--muted); font-size: var(--fs-sm); padding: 24px 0; text-align: center; }
+
+  /* ---------- board: ledger ---------- */
+  .toolbar, .filters { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; }
+  .toolbar { margin: 4px 0 12px; }
+  .filters { padding: 12px 0 16px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  .seg-ctl { display: inline-flex; background: var(--raised); border: 1px solid var(--line); border-radius: 9px; padding: 3px; gap: 2px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .seg-ctl button { border: 0; background: none; border-radius: 6px; padding: 6px 12px; font-size: var(--fs-sm); font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .seg-ctl button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+  .search { flex: 1 1 260px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-2); border-radius: 9px; padding: 0 12px; background: var(--surface); }
+  .search:focus-within { border-color: var(--accent); }
+  .search input { border: 0; outline: 0; background: none; font: inherit; font-size: var(--fs-sm); padding: 9px 0; width: 100%; color: var(--ink); }
+  .search svg { color: var(--faint); flex: none; }
+  select { font: inherit; font-size: var(--fs-sm); color: var(--ink); background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 10px; }
+  .toggle { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-2); cursor: pointer; }
+  .toggle input { accent-color: var(--warn); width: 16px; height: 16px; }
+  .count { margin-left: auto; color: var(--muted); font-size: var(--fs-sm); }
+
+  .group { border-top: 1px solid var(--line); }
+  .group:first-child { border-top: 0; }
+  .group > summary { list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 16px 4px 12px; }
+  .group > summary::-webkit-details-marker { display: none; }
+  .group > summary .caret { width: 18px; height: 18px; color: var(--faint); transition: transform .15s; flex: none; }
+  .group[open] > summary .caret { transform: rotate(90deg); }
+  .group > summary h3 { font-size: var(--fs-md); }
+  .group > summary .hint { color: var(--muted); font-size: var(--fs-sm); }
+  .group > summary .facts { margin-left: auto; display: flex; gap: 14px; color: var(--muted); font-size: var(--fs-sm); white-space: nowrap; }
+  .group > summary .facts b { color: var(--ink); font-family: var(--mono); font-weight: 650; }
+
+  .table-wrap { overflow-x: auto; margin: 0 -4px 12px; padding: 0 4px; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  /* Fixed layout keeps the same column widths in every group. */
+  table.ledger { min-width: 900px; }
+  col.c-name { width: 34%; } col.c-origin { width: 17%; } col.c-mode { width: 11%; }
+  col.c-listing, col.c-body { width: 8%; } col.c-uses { width: 13%; } col.c-last { width: 9%; }
+  th { text-align: left; font-size: var(--fs-xs); font-weight: 650; color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+  th button { border: 0; background: none; padding: 0; font: inherit; color: inherit; display: inline-flex; align-items: center; gap: 4px; }
+  th button:hover { color: var(--ink); }
+  th[aria-sort] button { color: var(--ink); }
+  th[aria-sort="ascending"] button::after { content: "↑"; }
+  th[aria-sort="descending"] button::after { content: "↓"; }
+  th.r, td.r { text-align: right; }
+  th.r button { margin-left: auto; }
+  td { padding: 13px 12px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: var(--fs-sm); }
+  tr.row { cursor: pointer; }
+  tr.row:hover td { background: var(--raised); }
+  tr.row.open td { background: var(--raised); border-bottom-color: transparent; }
+  .sk-name { font-family: var(--mono); font-weight: 650; font-size: var(--fs-base); color: var(--ink); overflow-wrap: anywhere; word-break: break-all; }
+  .sk-sum { color: var(--muted); margin-top: 3px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 60ch; }
+  .origin-name { font-weight: 600; color: var(--ink-2); }
+  .origin-loc { color: var(--faint); font-size: var(--fs-xs); margin-top: 3px; display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: center; }
+  .mode { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; font-weight: 600; color: var(--ink-2); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .dot.always { background: var(--always); }
+  .dot.onuse { background: var(--onuse); }
+  .dot.off { border: 1.5px solid var(--faint); }
+  .tok { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: var(--fs-base); font-weight: 650; }
+  .tok.always { color: var(--always); }
+  .tok.onuse { color: var(--onuse); }
+  .tok.zero { color: var(--faint); font-weight: 400; }
+  .uses { display: inline-flex; align-items: center; gap: 10px; justify-content: flex-end; }
+  .uses svg { display: block; }
+  .uses svg rect { fill: var(--onuse); }
+  .uses svg line { stroke: var(--line-2); }
+  .flag { display: inline-block; margin-top: 6px; font-size: var(--fs-xs); font-weight: 650; color: var(--warn); background: var(--warn-soft); border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+  .flags { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+  .when { color: var(--ink-2); white-space: nowrap; }
+  .when.none { color: var(--faint); }
+  tr.detail td { background: var(--raised); padding: 4px 16px 22px; }
+  /* Phones: each skill (and each agent) becomes a card; facts get their own small labels. */
+  @media (max-width: 720px) {
+    .table-wrap { overflow: visible; margin: 0; padding: 0; }
+    table.ledger, table.cmp { min-width: 0; table-layout: auto; }
+    table.ledger colgroup, table.ledger thead, table.cmp colgroup, table.cmp thead { display: none; }
+    table.ledger, table.ledger tbody, table.ledger tr, table.ledger td, table.cmp, table.cmp tbody, table.cmp tr, table.cmp td { display: block; }
+    tr.row, tr.agent-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; padding: 14px 4px 16px; border-bottom: 1px solid var(--line); }
+    tr.agent-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    tr.row td, tr.agent-row td { padding: 0; border: 0; text-align: left; }
+    tr.row td:nth-child(1), tr.row td:nth-child(2), tr.agent-row td:nth-child(1) { grid-column: 1 / -1; }
+    tr.row td[data-label]::before, tr.agent-row td[data-label]::before { content: attr(data-label); display: block; font-size: var(--fs-xs); color: var(--muted); margin-bottom: 2px; }
+    tr.row:hover td, tr.row.open td, tr.agent-row td { background: none !important; }
+    tr.row.open, tr.agent-row[aria-selected="true"] { background: var(--raised); }
+    tr.agent-row[aria-selected="true"] td:first-child { box-shadow: none; }
+    .cell-bar { justify-items: start; }
+    .uses, .flags { justify-content: flex-start; }
+    tr.detail td { padding: 4px 4px 20px; }
+  }
+  .detail-body { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px 40px; padding-top: 8px; }
+  @media (max-width: 860px) { .detail-body { grid-template-columns: 1fr; } }
+  .detail-body .desc { color: var(--ink-2); line-height: 1.75; max-width: 68ch; font-size: var(--fs-base); }
+  .detail-body dl { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 12px 20px; font-size: var(--fs-sm); align-content: start; }
+  .detail-body dt { color: var(--muted); font-weight: 600; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .detail-body dd { margin: 0; color: var(--ink-2); line-height: 1.6; }
+  .detail-body dd .path { font-family: var(--mono); font-size: var(--fs-xs); color: var(--muted); word-break: break-all; margin-top: 2px; }
+  .detail-body dd .sub { color: var(--muted); display: block; margin-top: 2px; }
+  .detail-body h4 { margin: 20px 0 8px; font-size: var(--fs-sm); color: var(--muted); }
+  .detail-body .chart { max-width: 440px; }
+
+  /* ---------- guide ---------- */
+  .guide { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 40px; align-items: start; }
+  .toc { position: sticky; top: 84px; display: grid; gap: 2px; font-size: var(--fs-sm); }
+  .toc b { font-size: var(--fs-xs); color: var(--faint); letter-spacing: .06em; margin-bottom: 6px; }
+  .toc a { color: var(--muted); text-decoration: none; padding: 6px 10px; border-radius: 7px; border-left: 2px solid transparent; }
+  .toc a:hover { color: var(--ink); background: var(--surface); }
+  .toc a.active { color: var(--ink); border-left-color: var(--ink); background: var(--surface); font-weight: 600; }
+  /* After the .toc rules, so hiding it on narrow screens wins. */
+  @media (max-width: 960px) { .guide { grid-template-columns: minmax(0, 1fr); } .toc { display: none; } }
+  .doc { display: grid; grid-template-columns: minmax(0, 1fr); gap: 56px; min-width: 0; }
+  .doc section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; scroll-margin-top: 90px; }
+  .doc .eyebrow { font-size: var(--fs-xs); font-weight: 700; letter-spacing: .08em; color: var(--muted); }
+  .doc h1 { font-size: 32px; font-weight: 750; }
+  .doc h2 { font-size: 24px; }
+  .doc h3 { margin-top: 8px; }
+  .doc p, .doc li { max-width: 70ch; color: var(--ink-2); font-size: 16px; line-height: 1.75; }
+  .doc ul, .doc ol { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+  .doc .intro { font-size: 18px; color: var(--ink-2); line-height: 1.7; max-width: 64ch; }
+  .questions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 760px) { .questions { grid-template-columns: 1fr; } }
+  .questions div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .questions b { display: block; font-size: var(--fs-base); margin-bottom: 4px; }
+  .questions span { color: var(--muted); font-size: var(--fs-sm); line-height: 1.6; }
+  figure { margin: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px 20px 18px; }
+  figure .canvas { overflow-x: auto; }
+  figure svg { display: block; width: 100%; min-width: 720px; height: auto; }
+  figcaption { color: var(--muted); font-size: var(--fs-sm); margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); line-height: 1.6; }
+  .live { font-family: var(--mono); font-weight: 650; color: var(--ink); }
+
+  /* diagram grammar */
+  .dg text { font-family: var(--font); fill: var(--ink); font-size: 14.5px; font-weight: 600; }
+  .dg .sub { fill: var(--muted); font-size: 12.5px; font-weight: 400; }
+  .dg .mono { font-family: var(--mono); font-size: 12px; font-weight: 400; fill: var(--muted); }
+  .dg .node { fill: var(--surface); stroke: var(--line-2); stroke-width: 1.5; }
+  .dg .node.always { fill: var(--always-soft); stroke: var(--always); }
+  .dg .node.onuse { fill: var(--onuse-soft); stroke: var(--onuse); }
+  .dg .node.ink { fill: var(--raised); stroke: var(--ink-2); }
+  .dg .node.dashed { stroke-dasharray: 5 4; }
+  .dg .edge { fill: none; stroke: var(--ink-2); stroke-width: 1.6; }
+  .dg .edge.dashed { stroke-dasharray: 5 4; }
+  .dg .note-always { fill: var(--always); font-weight: 650; font-size: 13px; }
+  .dg .note-onuse { fill: var(--onuse); font-weight: 650; font-size: 13px; }
+  .dg .note-warn { fill: var(--warn); font-weight: 600; font-size: 12.5px; }
+  .dg .arrowhead { fill: var(--ink-2); }
+  .dg .band-sys { fill: var(--bar); }
+  .dg .band-list { fill: var(--always); }
+  .dg .band-body { fill: var(--onuse); }
+  .dg .band-conv { fill: var(--bar-2); stroke: var(--line-2); }
+  .dg .axis { stroke: var(--line-2); stroke-width: 1.5; }
+  .dg .guide-line { stroke: var(--ink-2); stroke-dasharray: 3 3; }
+  .dg .tick { fill: var(--muted); font-size: 12.5px; font-weight: 500; }
+
+  .matrix { width: 100%; border-collapse: collapse; min-width: 720px; font-size: var(--fs-sm); table-layout: auto; }
+  .matrix th, .matrix td { padding: 12px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .matrix thead th { font-size: var(--fs-xs); color: var(--muted); border-bottom-color: var(--line-2); white-space: normal; }
+  .matrix td.c { text-align: center; white-space: nowrap; }
+  .yes { color: var(--ink); font-weight: 650; }
+  .no { color: var(--faint); }
+  .matrix td:last-child { color: var(--muted); line-height: 1.7; }
+  .matrix td:last-child code { white-space: nowrap; }
+  .matrix col.m-name { width: 15%; } .matrix col.m-check { width: 11%; } .matrix col.m-how { width: 41%; }
+  .matrix.envs { min-width: 560px; }
+  .matrix.envs td:first-child code { white-space: nowrap; }
+  .word-always { color: var(--always); font-weight: 650; }
+
+  .homes { display: grid; gap: 14px; }
+  .pc { border: 1.5px dashed var(--line-2); border-radius: 14px; padding: 16px; display: grid; gap: 12px; }
+  .pc > b { font-size: var(--fs-sm); color: var(--muted); }
+  .homes-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 760px) { .homes-grid { grid-template-columns: 1fr; } }
+  .home { border: 1.5px solid var(--line-2); border-radius: 12px; padding: 14px 16px; display: grid; gap: 6px; background: var(--raised); align-content: start; }
+  .home b { font-size: var(--fs-base); }
+  .home code { justify-self: start; }
+  .home span { color: var(--muted); font-size: var(--fs-sm); line-height: 1.6; }
+  .home .eg { font-family: var(--mono); font-size: var(--fs-xs); color: var(--ink-2); }
+  .home .eg s { color: var(--faint); }
+  .rule { display: flex; gap: 12px; align-items: flex-start; background: var(--accent-soft); border-radius: 10px; padding: 12px 16px; font-size: var(--fs-sm); color: var(--ink-2); line-height: 1.6; }
+  .rule b { color: var(--ink); white-space: nowrap; }
+
+  .sources { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 4px; }
+  @media (max-width: 760px) { .sources { grid-template-columns: 1fr; } }
+  .sources div { border-top: 2px solid var(--line-2); padding-top: 10px; }
+  .sources b { display: block; font-size: var(--fs-sm); margin-bottom: 4px; }
+  .sources span { color: var(--muted); font-size: var(--fs-sm); line-height: 1.6; }
+
+  /* guide: per-agent collection cards */
+  .agent-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 880px) { .agent-cards { grid-template-columns: 1fr; } }
+  .agent-card { background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--c); border-radius: 12px; padding: 16px 18px 18px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+  .agent-card header { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; }
+  .agent-card header h3 { font-size: var(--fs-md); margin: 0; }
+  .agent-card .status { margin-left: auto; font-size: var(--fs-xs); font-weight: 650; color: var(--onuse); background: var(--onuse-soft); border-radius: 999px; padding: 2px 10px; white-space: nowrap; }
+  .agent-card .status.off { color: var(--muted); background: var(--raised); }
+  .agent-card dl { margin: 0; display: grid; gap: 10px; }
+  .agent-card dt { font-size: var(--fs-xs); font-weight: 700; color: var(--muted); letter-spacing: .02em; }
+  .agent-card dd { margin: 2px 0 0; font-size: var(--fs-sm); color: var(--ink-2); line-height: 1.65; }
+  .agent-card code { font-size: .88em; }
+
+  /* guide: where the API key goes */
+  .flow { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: stretch; }
+  .flow .n { border: 1.5px solid var(--line-2); border-radius: 12px; padding: 14px 16px; background: var(--raised); display: grid; gap: 4px; align-content: start; }
+  .flow .n.here { border-color: var(--always); background: var(--always-soft); }
+  .flow .n b { font-size: var(--fs-base); }
+  .flow .n span { color: var(--muted); font-size: var(--fs-sm); line-height: 1.55; }
+  .flow .n code { justify-self: start; }
+  .flow .arrow { align-self: center; color: var(--ink-2); font-size: 20px; }
+  @media (max-width: 760px) { .flow { grid-template-columns: 1fr; } .flow .arrow { justify-self: center; transform: rotate(90deg); } }
+  .not-here { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+  @media (max-width: 760px) { .not-here { grid-template-columns: 1fr; } }
+  .not-here div { border-radius: 10px; padding: 10px 14px; background: var(--warn-soft); color: var(--ink-2); font-size: var(--fs-sm); line-height: 1.6; }
+  .not-here b { color: var(--warn); display: block; }
+  .os-tabs { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+  .terms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 760px) { .terms { grid-template-columns: 1fr; } }
+  .term { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 8px; align-content: start; }
+  .term .sample { display: flex; align-items: center; gap: 10px; min-height: 26px; }
+  .term b { font-size: var(--fs-base); }
+  .term p { font-size: var(--fs-sm) !important; color: var(--muted) !important; line-height: 1.65 !important; }
+  .mini-track { display: flex; gap: 2px; width: 150px; height: 18px; border-radius: 4px; overflow: hidden; background: var(--bar-2); }
+  .mini-track i { display: block; height: 100%; background: var(--always); }
+  .mini-track i.idle { background: repeating-linear-gradient(135deg, var(--always-hatch) 0 4px, var(--always-soft) 4px 8px); }
+  .mini-track i.dup { box-shadow: inset 0 -4px 0 var(--warn); }
+
+  .recipes { display: grid; gap: 14px; }
+  .recipe { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; display: grid; gap: 10px; min-width: 0; }
+  .recipe h3 { font-size: var(--fs-md); margin: 0; }
+  .recipe p { font-size: 15px !important; }
+  .code { position: relative; min-width: 0; }
+  pre { margin: 0; background: var(--raised); border: 1px solid var(--line); border-radius: 9px; padding: 12px 70px 12px 14px; overflow-x: auto; font: 13px/1.7 var(--mono); color: var(--ink); }
+  pre .c { color: var(--faint); }
+  .copy { position: absolute; top: 8px; right: 8px; border: 1px solid var(--line-2); background: var(--surface); border-radius: 6px; padding: 2px 8px; font: 600 12px var(--font); color: var(--muted); }
+  .copy:hover { color: var(--ink); }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="12" width="4" height="9" rx="1" fill="var(--always)"/><rect x="7" y="7" width="4" height="14" rx="1" fill="var(--always)"/><rect x="13" y="3" width="4" height="18" rx="1" fill="var(--onuse)"/><rect x="19" y="9" width="2" height="12" rx="1" fill="var(--bar)"/></svg>
+      <span data-i18n="brand"></span>
+    </div>
+    <nav class="pages" data-i18n-attr="aria-label:nav.aria">
+      <a href="#/board" data-page="board" data-i18n="nav.board"></a>
+      <a href="#/guide" data-page="guide" data-i18n="nav.guide"></a>
+    </nav>
+    <div class="topbar-right">
+      <span class="stamp" id="stamp"></span>
+      <button class="btn" id="exact" data-i18n="btn.exact"></button>
+      <button class="btn primary" id="refresh" data-i18n="btn.refresh"></button>
+      <button class="btn" id="theme" data-i18n-attr="aria-label:theme.aria"></button>
+      <label class="lang">
+        <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M1.7 8h12.6M8 1.7c2 2.2 2 10.4 0 12.6M8 1.7c-2 2.2-2 10.4 0 12.6" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>
+        <select id="lang" data-i18n-attr="aria-label:lang.aria">
+          <option value="ko">한국어</option>
+          <option value="en">English</option>
+          <option value="zh">简体中文</option>
+        </select>
+      </label>
+    </div>
+  </div>
+</header>
+<div class="notice" id="notice" hidden><p id="notice-text"></p></div>
+
+<!-- ======================= board ======================= -->
+<main id="page-board">
+  <section class="agentbar">
+    <span id="agentbar-label" data-i18n="agents.label"></span>
+    <div class="seg-ctl" id="agent" role="group" aria-labelledby="agentbar-label"></div>
+  </section>
+
+  <section class="summary" id="summary" data-i18n-attr="aria-label:sum.aria"></section>
+
+  <section class="panel" id="agents-panel">
+    <div class="panel-head">
+      <h2 data-i18n="ag.title"></h2>
+      <button class="info" data-pop="agents" data-i18n-attr="aria-label:info.aria" aria-expanded="false">?</button>
+    </div>
+    <p class="lead" data-i18n="ag.lead"></p>
+    <div id="agents"></div>
+    <p class="cmp-foot" data-i18n="ag.foot"></p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2 data-i18n="ctx.title"></h2>
+      <button class="info" data-pop="ctx" data-i18n-attr="aria-label:info.aria" aria-expanded="false">?</button>
+    </div>
+    <p class="lead" data-i18n="ctx.lead"></p>
+    <div class="ctx" id="ctx"></div>
+    <div class="legend">
+      <span><i class="swatch"></i><span data-i18n="ctx.legend.used"></span></span>
+      <span><i class="swatch idle"></i><span data-i18n="ctx.legend.idle"></span></span>
+      <span><i class="swatch dup"></i><span data-i18n="ctx.legend.dup"></span></span>
+      <span><i class="swatch base"></i><span data-i18n="ctx.legend.base"></span></span>
+    </div>
+  </section>
+
+  <section class="split">
+    <div class="panel">
+      <div class="panel-head">
+        <h2 id="daily-title"></h2>
+        <div class="seg-ctl" id="metric" role="group" data-i18n-attr="aria-label:daily.metric.aria">
+          <button data-v="calls" data-i18n="daily.metric.calls"></button>
+          <button data-v="tokens" data-i18n="daily.metric.tokens"></button>
+        </div>
+      </div>
+      <p class="lead" id="daily-lead"></p>
+      <div class="chart-legend" id="daily-legend"></div>
+      <div class="chart" id="daily"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2 data-i18n="top.title"></h2><span class="aside" data-i18n="top.aside"></span></div>
+      <p class="lead" data-i18n="top.lead"></p>
+      <ol class="top" id="top"></ol>
+    </div>
+  </section>
+
+  <section class="panel" id="ledger">
+    <div class="panel-head">
+      <h2 data-i18n="led.title"></h2>
+      <button class="info" data-pop="ledger" data-i18n-attr="aria-label:info.aria" aria-expanded="false">?</button>
+    </div>
+    <div class="toolbar">
+      <div class="seg-ctl" id="view" role="group" data-i18n-attr="aria-label:led.view.aria">
+        <button data-v="category" data-i18n="led.view.category"></button>
+        <button data-v="origin" data-i18n="led.view.origin"></button>
+        <button data-v="flat" data-i18n="led.view.flat"></button>
+      </div>
+      <label class="search">
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <input type="search" id="q" data-i18n-attr="placeholder:led.search;aria-label:led.search.aria">
+      </label>
+    </div>
+    <div class="filters">
+      <div class="seg-ctl" id="f-mode" role="group" data-i18n-attr="aria-label:led.mode.aria">
+        <button data-v="" data-i18n="led.mode.all"></button>
+        <button data-v="auto" data-i18n="led.mode.auto"></button>
+        <button data-v="manual" data-i18n="led.mode.manual"></button>
+        <button data-v="off" data-i18n="led.mode.off"></button>
+      </div>
+      <select id="f-scope" data-i18n-attr="aria-label:led.scope.aria">
+        <option value="" data-i18n="led.scope.all"></option>
+        <option value="user" data-i18n="led.scope.user"></option>
+        <option value="project" data-i18n="led.scope.project"></option>
+        <option value="plugin" data-i18n="led.scope.plugin"></option>
+        <option value="system" data-i18n="led.scope.system"></option>
+        <option value="other" data-i18n="led.scope.other"></option>
+      </select>
+      <select id="f-cat" data-i18n-attr="aria-label:led.cat.aria"></select>
+      <label class="toggle"><input type="checkbox" id="f-idle"> <span data-i18n="led.idle"></span></label>
+      <label class="toggle"><input type="checkbox" id="f-dup"> <span data-i18n="led.dup"></span></label>
+      <span class="count" id="count"></span>
+      <button class="link" id="reset" data-i18n="led.reset"></button>
+    </div>
+    <div id="list"><p class="empty" data-i18n="stamp.loading"></p></div>
+  </section>
+</main>
+
+<!-- ======================= guide ======================= -->
+<main id="page-guide" hidden>
+  <div class="guide">
+    <nav class="toc" data-i18n-attr="aria-label:toc.aria">
+      <b data-i18n="nav.guide"></b>
+      <a href="#/guide/start" data-i18n="toc.start"></a>
+      <a href="#/guide/flow" data-i18n="toc.flow"></a>
+      <a href="#/guide/cost" data-i18n="toc.cost"></a>
+      <a href="#/guide/modes" data-i18n="toc.modes"></a>
+      <a href="#/guide/homes" data-i18n="toc.homes"></a>
+      <a href="#/guide/data" data-i18n="toc.data"></a>
+      <a href="#/guide/agents" data-i18n="toc.agents"></a>
+      <a href="#/guide/exact" data-i18n="toc.exact"></a>
+      <a href="#/guide/terms" data-i18n="toc.terms"></a>
+      <a href="#/guide/tidy" data-i18n="toc.tidy"></a>
+    </nav>
+
+    <div class="doc">
+      <section id="g-start">
+        <span class="eyebrow" data-i18n="nav.guide"></span>
+        <h1 data-i18n="g.start.h"></h1>
+        <p class="intro" data-i18n="g.start.intro"></p>
+        <div class="questions">
+          <div><b data-i18n="g.start.q1"></b><span data-i18n="g.start.q1s"></span></div>
+          <div><b data-i18n="g.start.q2"></b><span data-i18n="g.start.q2s"></span></div>
+          <div><b data-i18n="g.start.q3"></b><span data-i18n-html="g.start.q3s"></span></div>
+        </div>
+      </section>
+
+      <section id="g-flow">
+        <span class="eyebrow" data-i18n="g.eyebrow.how"></span>
+        <h2 data-i18n="toc.flow"></h2>
+        <p data-i18n-html="g.flow.p"></p>
+        <figure>
+          <div class="canvas">
+            <svg class="dg" viewBox="0 0 1000 290" role="img" aria-labelledby="d1t">
+              <title id="d1t" data-i18n="d1.title"></title>
+              <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrowhead" d="M0 0L10 5L0 10z"/></marker></defs>
+              <rect class="node always" x="16" y="40" width="196" height="64" rx="10"/>
+              <text x="114" y="67" text-anchor="middle" data-i18n="d1.list"></text>
+              <text class="sub" x="114" y="88" text-anchor="middle" data-i18n="d1.list.sub"></text>
+              <path class="edge" d="M212 72H234" marker-end="url(#ah)"/>
+              <polygon class="node" points="300,28 364,72 300,116 236,72"/>
+              <text x="300" y="68" text-anchor="middle" data-i18n="d1.pick1"></text>
+              <text x="300" y="88" text-anchor="middle" data-i18n="d1.pick2"></text>
+              <path class="edge" d="M364 72H414" marker-end="url(#ah)"/>
+              <text class="sub" x="389" y="62" text-anchor="middle" data-i18n="d1.yes"></text>
+              <rect class="node" x="420" y="40" width="160" height="64" rx="10"/>
+              <text x="500" y="67" text-anchor="middle" data-i18n="d1.load"></text>
+              <text class="sub" x="500" y="88" text-anchor="middle" data-i18n="d1.load.sub"></text>
+              <path class="edge" d="M580 72H624" marker-end="url(#ah)"/>
+              <rect class="node onuse" x="630" y="40" width="190" height="64" rx="10"/>
+              <text x="725" y="67" text-anchor="middle" data-i18n="d1.body1"></text>
+              <text x="725" y="88" text-anchor="middle" data-i18n="d1.body2"></text>
+              <path class="edge" d="M820 72H844" marker-end="url(#ah)"/>
+              <rect class="node" x="850" y="40" width="134" height="64" rx="10"/>
+              <text x="917" y="67" text-anchor="middle" data-i18n="d1.work1"></text>
+              <text x="917" y="88" text-anchor="middle" data-i18n="d1.work2"></text>
+              <path class="edge" d="M300 116V174" marker-end="url(#ah)"/>
+              <text class="sub" x="310" y="150" data-i18n="d1.no"></text>
+              <rect class="node" x="230" y="180" width="140" height="56" rx="10"/>
+              <text x="300" y="213" text-anchor="middle" data-i18n="d1.none"></text>
+              <rect class="node ink" x="420" y="180" width="160" height="56" rx="10"/>
+              <text x="500" y="204" text-anchor="middle" data-i18n="d1.user"></text>
+              <text class="sub" x="500" y="224" text-anchor="middle" data-i18n="d1.user.sub"></text>
+              <path class="edge" d="M580 208H725V110" marker-end="url(#ah)"/>
+              <text class="note-always" x="114" y="130" text-anchor="middle" data-i18n="d1.always1"></text>
+              <text class="note-always" x="114" y="149" text-anchor="middle" data-i18n="d1.always2"></text>
+              <text class="note-onuse" x="742" y="150" data-i18n="d1.onuse1"></text>
+              <text class="note-onuse" x="742" y="169" data-i18n="d1.onuse2"></text>
+            </svg>
+          </div>
+          <figcaption data-i18n="g.flow.cap"></figcaption>
+        </figure>
+      </section>
+
+      <section id="g-cost">
+        <span class="eyebrow" data-i18n="g.eyebrow.key"></span>
+        <h2 data-i18n="toc.cost"></h2>
+        <p data-i18n="g.cost.p"></p>
+        <figure>
+          <div class="canvas">
+            <svg class="dg" viewBox="0 0 1000 330" role="img" aria-labelledby="d2t">
+              <title id="d2t" data-i18n="d2.title"></title>
+              <text class="sub" x="16" y="22" data-i18n="d2.note"></text>
+              <g id="d2-bars"></g>
+              <line class="axis" x1="88" y1="280" x2="724" y2="280"/>
+              <line class="guide-line" x1="272" y1="174" x2="300" y2="174"/>
+              <line class="guide-line" x1="300" y1="102" x2="320" y2="102"/>
+              <path class="edge" d="M300 170V106" marker-start="url(#ah)" marker-end="url(#ah)"/>
+              <text x="290" y="62" text-anchor="end" data-i18n="d2.measured"></text>
+              <text class="sub" x="290" y="82" text-anchor="end" data-i18n="d2.measured.sub"></text>
+              <g>
+                <line class="guide-line" x1="716" y1="98" x2="738" y2="98"/>
+                <text x="746" y="94" data-i18n="d2.conv"></text><text class="sub" x="746" y="112" data-i18n="d2.conv.sub"></text>
+                <line class="guide-line" x1="716" y1="173" x2="738" y2="173"/>
+                <text x="746" y="169" style="fill:var(--onuse)" data-i18n="d2.body"></text><text class="sub" x="746" y="187" data-i18n="d2.body.sub"></text>
+                <line class="guide-line" x1="716" y1="212" x2="738" y2="212"/>
+                <text x="746" y="208" style="fill:var(--always)" data-i18n="d2.list"></text><text class="sub" x="746" y="226" data-i18n="d2.list.sub"></text>
+                <line class="guide-line" x1="716" y1="252" x2="738" y2="252"/>
+                <text x="746" y="248" data-i18n="d2.sys"></text><text class="sub" x="746" y="266" data-i18n="d2.sys.sub"></text>
+              </g>
+            </svg>
+          </div>
+          <figcaption data-i18n-html="g.cost.cap"></figcaption>
+        </figure>
+        <p data-i18n="g.cost.p2"></p>
+      </section>
+
+      <section id="g-modes">
+        <span class="eyebrow" data-i18n="g.eyebrow.concept"></span>
+        <h2 data-i18n="toc.modes"></h2>
+        <p data-i18n="g.modes.p"></p>
+        <figure>
+          <div class="canvas">
+            <table class="matrix">
+              <colgroup><col class="m-name"><col class="m-check"><col class="m-check"><col class="m-check"><col class="m-check"><col class="m-how"></colgroup>
+              <thead><tr><th data-i18n="g.modes.h1"></th><th data-i18n="g.modes.h2"></th><th data-i18n="g.modes.h3"></th><th data-i18n="g.modes.h4"></th><th data-i18n="g.modes.h5"></th><th data-i18n="g.modes.h6"></th></tr></thead>
+              <tbody>
+                <tr><td><span class="mode"><i class="dot always"></i><span data-i18n="mode.on"></span></span></td><td class="c yes" data-i18n="yes"></td><td class="c yes" data-i18n="yes"></td><td class="c yes" data-i18n="yes"></td><td class="c"><span class="word-always" data-i18n="g.modes.some"></span></td><td data-i18n="g.modes.on"></td></tr>
+                <tr><td><span class="mode"><i class="dot onuse"></i><span data-i18n="mode.user-invocable-only"></span></span></td><td class="c no" data-i18n="no"></td><td class="c no" data-i18n="no"></td><td class="c yes" data-i18n="yes"></td><td class="c"><span class="tok zero">0</span></td><td data-i18n-html="g.modes.manual"></td></tr>
+                <tr><td><span class="mode"><i class="dot off"></i><span data-i18n="mode.off"></span></span></td><td class="c no" data-i18n="no"></td><td class="c no" data-i18n="no"></td><td class="c no" data-i18n="no"></td><td class="c"><span class="tok zero">0</span></td><td data-i18n-html="g.modes.off"></td></tr>
+                <tr><td><span class="mode"><i class="dot off"></i><span data-i18n="mode.plugin-off"></span></span></td><td class="c no" data-i18n="no"></td><td class="c no" data-i18n="no"></td><td class="c no" data-i18n="no"></td><td class="c"><span class="tok zero">0</span></td><td data-i18n-html="g.modes.pluginOff"></td></tr>
+                <tr><td><span class="mode"><i class="dot off"></i><span data-i18n="mode.shadowed"></span></span></td><td class="c no" data-i18n="no"></td><td class="c no" data-i18n="no"></td><td class="c no" data-i18n="no"></td><td class="c"><span class="tok zero">0</span></td><td data-i18n="g.modes.shadowed"></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <figcaption data-i18n-html="g.modes.cap"></figcaption>
+        </figure>
+      </section>
+
+      <section id="g-homes">
+        <span class="eyebrow" data-i18n="g.eyebrow.concept"></span>
+        <h2 data-i18n="toc.homes"></h2>
+        <p data-i18n-html="g.homes.p"></p>
+        <figure>
+          <div class="homes">
+            <div class="pc">
+              <b data-i18n="g.homes.pc"></b>
+              <div class="homes-grid">
+                <div class="home"><b data-i18n="where.user"></b><code>~/.claude/skills/</code><span data-i18n="g.homes.user"></span><span class="eg">review/</span></div>
+                <div class="home"><b data-i18n="led.scope.project"></b><code data-i18n="g.homes.projectPath"></code><span data-i18n="g.homes.project"></span><span class="eg" data-i18n-html="g.homes.projectEg"></span></div>
+                <div class="home"><b data-i18n="led.scope.plugin"></b><code data-i18n="g.homes.pluginName"></code><span data-i18n="g.homes.plugin"></span><span class="eg">superpowers:brainstorming</span></div>
+              </div>
+            </div>
+            <div class="rule"><b data-i18n="g.homes.rule"></b><span data-i18n-html="g.homes.ruleText"></span></div>
+          </div>
+        </figure>
+      </section>
+
+      <section id="g-data">
+        <span class="eyebrow" data-i18n="g.eyebrow.how"></span>
+        <h2 data-i18n="toc.data"></h2>
+        <p data-i18n-html="g.data.p"></p>
+        <figure>
+          <div class="canvas">
+            <svg class="dg" viewBox="0 0 1000 300" role="img" aria-labelledby="d5t">
+              <title id="d5t" data-i18n="d5.title"></title>
+              <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrowhead" d="M0 0L10 5L0 10z"/></marker></defs>
+              <rect class="node" x="16" y="20" width="250" height="62" rx="10"/>
+              <text x="32" y="46" data-i18n="d5.logs"></text>
+              <text class="sub" x="32" y="68" data-i18n="d5.logs.sub"></text>
+              <rect class="node" x="16" y="110" width="250" height="62" rx="10"/>
+              <text x="32" y="136" data-i18n="d5.skill"></text>
+              <text class="sub" x="32" y="158" data-i18n="d5.skill.sub"></text>
+              <rect class="node" x="16" y="200" width="250" height="62" rx="10"/>
+              <text x="32" y="226" data-i18n="d5.settings"></text>
+              <text class="mono" x="32" y="248">settings.json · config.toml</text>
+              <path class="edge" d="M266 51C306 51 306 128 336 128" marker-end="url(#ah2)"/>
+              <path class="edge" d="M266 141H336" marker-end="url(#ah2)"/>
+              <path class="edge" d="M266 231C306 231 306 154 336 154" marker-end="url(#ah2)"/>
+              <rect class="node ink" x="340" y="110" width="190" height="62" rx="10"/>
+              <text x="435" y="137" text-anchor="middle" data-i18n="d5.collector"></text>
+              <text class="mono" x="435" y="158" text-anchor="middle">skill-stats.mjs</text>
+              <path class="edge" d="M530 141H596" marker-end="url(#ah2)"/>
+              <path class="node" d="M600 112a80 12 0 0 1 160 0v58a80 12 0 0 1 -160 0z"/>
+              <ellipse class="node" cx="680" cy="112" rx="80" ry="12"/>
+              <text x="680" y="146" text-anchor="middle" style="font-family:var(--mono);font-size:14px">stats.json</text>
+              <text class="sub" x="680" y="166" text-anchor="middle" data-i18n="d5.store.sub"></text>
+              <path class="edge" d="M760 141H826" marker-end="url(#ah2)"/>
+              <rect class="node" x="830" y="110" width="154" height="62" rx="10"/>
+              <text x="907" y="137" text-anchor="middle" data-i18n="nav.board"></text>
+              <text class="mono" x="907" y="158" text-anchor="middle">localhost:4178</text>
+              <rect class="node dashed" x="340" y="222" width="190" height="58" rx="10"/>
+              <text x="435" y="246" text-anchor="middle" style="font-family:var(--mono);font-size:13.5px">count_tokens API</text>
+              <text class="sub" x="435" y="266" text-anchor="middle" data-i18n="d5.api.sub"></text>
+              <path class="edge dashed" d="M435 222V176" marker-end="url(#ah2)"/>
+              <text class="note-warn" x="680" y="56" text-anchor="middle" data-i18n="d5.warn"></text>
+              <text class="sub" x="680" y="76" text-anchor="middle" data-i18n="d5.warn.sub"></text>
+            </svg>
+          </div>
+          <div class="sources">
+            <div><b data-i18n="g.data.s1"></b><span data-i18n="g.data.s1t"></span></div>
+            <div><b data-i18n="g.data.s2"></b><span data-i18n="g.data.s2t"></span></div>
+            <div><b data-i18n="g.data.s3"></b><span data-i18n="g.data.s3t"></span></div>
+          </div>
+        </figure>
+        <p data-i18n-html="g.data.p2"></p>
+      </section>
+
+      <section id="g-agents">
+        <span class="eyebrow" data-i18n="g.eyebrow.collect"></span>
+        <h2 data-i18n="toc.agents"></h2>
+        <p data-i18n="g.agents.p"></p>
+        <div class="agent-cards">
+          <article class="agent-card" style="--c:var(--ag-claude)">
+            <header><i class="adot"></i><h3>Claude Code</h3><span class="status" data-live="agent:claude"></span></header>
+            <dl>
+              <div><dt data-i18n="g.ag.logs"></dt><dd data-i18n-html="g.ag.claude.logs"></dd></div>
+              <div><dt data-i18n="g.ag.calls"></dt><dd data-i18n-html="g.ag.claude.calls"></dd></div>
+              <div><dt data-i18n="g.ag.usage"></dt><dd data-i18n-html="g.ag.claude.usage"></dd></div>
+              <div><dt data-i18n="g.ag.listing"></dt><dd data-i18n-html="g.ag.claude.listing"></dd></div>
+              <div><dt data-i18n="g.ag.dirs"></dt><dd data-i18n-html="g.ag.claude.dirs"></dd></div>
+              <div><dt data-i18n="g.ag.note"></dt><dd data-i18n-html="g.ag.claude.note"></dd></div>
+            </dl>
+          </article>
+          <article class="agent-card" style="--c:var(--ag-codex)">
+            <header><i class="adot"></i><h3>Codex</h3><span class="status" data-live="agent:codex"></span></header>
+            <dl>
+              <div><dt data-i18n="g.ag.logs"></dt><dd data-i18n-html="g.ag.codex.logs"></dd></div>
+              <div><dt data-i18n="g.ag.calls"></dt><dd data-i18n-html="g.ag.codex.calls"></dd></div>
+              <div><dt data-i18n="g.ag.usage"></dt><dd data-i18n-html="g.ag.codex.usage"></dd></div>
+              <div><dt data-i18n="g.ag.listing"></dt><dd data-i18n-html="g.ag.codex.listing"></dd></div>
+              <div><dt data-i18n="g.ag.dirs"></dt><dd data-i18n-html="g.ag.codex.dirs"></dd></div>
+              <div><dt data-i18n="g.ag.note"></dt><dd data-i18n-html="g.ag.codex.note"></dd></div>
+            </dl>
+          </article>
+          <article class="agent-card" style="--c:var(--ag-gemini)">
+            <header><i class="adot"></i><h3>Gemini CLI</h3><span class="status" data-live="agent:gemini"></span></header>
+            <dl>
+              <div><dt data-i18n="g.ag.logs"></dt><dd data-i18n-html="g.ag.gemini.logs"></dd></div>
+              <div><dt data-i18n="g.ag.calls"></dt><dd data-i18n-html="g.ag.gemini.calls"></dd></div>
+              <div><dt data-i18n="g.ag.usage"></dt><dd data-i18n-html="g.ag.gemini.usage"></dd></div>
+              <div><dt data-i18n="g.ag.listing"></dt><dd data-i18n-html="g.ag.gemini.listing"></dd></div>
+              <div><dt data-i18n="g.ag.dirs"></dt><dd data-i18n-html="g.ag.gemini.dirs"></dd></div>
+              <div><dt data-i18n="g.ag.note"></dt><dd data-i18n-html="g.ag.gemini.note"></dd></div>
+            </dl>
+          </article>
+          <article class="agent-card" style="--c:var(--ag-copilot)">
+            <header><i class="adot"></i><h3>GitHub Copilot CLI</h3><span class="pill" data-i18n="ag.exp"></span><span class="status" data-live="agent:copilot"></span></header>
+            <dl>
+              <div><dt data-i18n="g.ag.logs"></dt><dd data-i18n-html="g.ag.copilot.logs"></dd></div>
+              <div><dt data-i18n="g.ag.calls"></dt><dd data-i18n-html="g.ag.copilot.calls"></dd></div>
+              <div><dt data-i18n="g.ag.usage"></dt><dd data-i18n-html="g.ag.copilot.usage"></dd></div>
+              <div><dt data-i18n="g.ag.listing"></dt><dd data-i18n-html="g.ag.copilot.listing"></dd></div>
+              <div><dt data-i18n="g.ag.dirs"></dt><dd data-i18n-html="g.ag.copilot.dirs"></dd></div>
+              <div><dt data-i18n="g.ag.note"></dt><dd data-i18n-html="g.ag.copilot.note"></dd></div>
+            </dl>
+          </article>
+        </div>
+        <p data-i18n-html="g.agents.p2"></p>
+      </section>
+
+      <section id="g-exact">
+        <span class="eyebrow" data-i18n="g.eyebrow.setup"></span>
+        <h2 data-i18n="g.exact.h"></h2>
+        <p data-i18n-html="g.exact.p"></p>
+        <figure>
+          <div class="flow">
+            <div class="n here"><b data-i18n="g.exact.f1"></b><span data-i18n="g.exact.f1s"></span><code>SKILL_STATS_API_KEY</code></div>
+            <span class="arrow" aria-hidden="true">→</span>
+            <div class="n"><b data-i18n="g.exact.f2"></b><span data-i18n="g.exact.f2s"></span><code>node setup.mjs dashboard</code></div>
+            <span class="arrow" aria-hidden="true">→</span>
+            <div class="n"><b>Anthropic API</b><span data-i18n="g.exact.f3s"></span><code>count_tokens</code></div>
+          </div>
+          <div class="not-here">
+            <div><b data-i18n="g.exact.no1"></b><span data-i18n="g.exact.no1t"></span></div>
+            <div><b data-i18n="g.exact.no2"></b><span data-i18n-html="g.exact.no2t"></span></div>
+          </div>
+          <figcaption data-i18n-html="g.exact.cap"></figcaption>
+        </figure>
+
+        <h3 data-i18n="g.exact.varsH"></h3>
+        <p data-i18n-html="g.exact.varsP"></p>
+        <div class="canvas" style="overflow-x:auto">
+          <table class="matrix envs">
+            <thead><tr><th data-i18n="g.exact.th1"></th><th data-i18n="g.exact.th2"></th><th data-i18n="g.exact.th3"></th></tr></thead>
+            <tbody>
+              <tr><td><code>SKILL_STATS_API_KEY</code></td><td data-i18n="g.exact.v1"></td><td>–</td></tr>
+              <tr><td><code>ANTHROPIC_API_KEY</code></td><td data-i18n="g.exact.v2"></td><td>–</td></tr>
+              <tr><td><code>SKILL_STATS_MODEL</code></td><td data-i18n="g.exact.v3"></td><td><code>claude-sonnet-5</code></td></tr>
+              <tr><td><code>CODEX_HOME</code></td><td data-i18n="g.exact.v4"></td><td><code>~/.codex</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 data-i18n="g.exact.whereH"></h3>
+        <div class="os-tabs">
+          <div class="seg-ctl" id="os" role="group" data-i18n-attr="aria-label:g.exact.osAria">
+            <button data-v="win">Windows · PowerShell</button>
+            <button data-v="unix">macOS · Linux</button>
+          </div>
+        </div>
+        <div class="recipes" data-os-block="win">
+          <div class="recipe">
+            <h3 data-i18n="g.exact.once"></h3>
+            <p data-i18n="g.exact.onceP"></p>
+            <div class="code"><button class="copy" data-i18n="copy"></button><pre data-i18n-html="g.exact.winOnce"></pre></div>
+          </div>
+          <div class="recipe">
+            <h3 data-i18n="g.exact.keep"></h3>
+            <p data-i18n-html="g.exact.winKeepP"></p>
+            <div class="code"><button class="copy" data-i18n="copy"></button><pre data-i18n-html="g.exact.winKeep"></pre></div>
+          </div>
+        </div>
+        <div class="recipes" data-os-block="unix">
+          <div class="recipe">
+            <h3 data-i18n="g.exact.once"></h3>
+            <p data-i18n="g.exact.onceP"></p>
+            <div class="code"><button class="copy" data-i18n="copy"></button><pre data-i18n-html="g.exact.unixOnce"></pre></div>
+          </div>
+          <div class="recipe">
+            <h3 data-i18n="g.exact.keep"></h3>
+            <p data-i18n-html="g.exact.unixKeepP"></p>
+            <div class="code"><button class="copy" data-i18n="copy"></button><pre data-i18n-html="g.exact.unixKeep"></pre></div>
+          </div>
+        </div>
+
+        <h3 data-i18n="g.exact.checkH"></h3>
+        <ul>
+          <li data-i18n-html="g.exact.c1"></li>
+          <li data-i18n-html="g.exact.c2"></li>
+          <li data-i18n-html="g.exact.c3"></li>
+        </ul>
+      </section>
+
+      <section id="g-terms">
+        <span class="eyebrow" data-i18n="g.eyebrow.read"></span>
+        <h2 data-i18n="toc.terms"></h2>
+        <div class="terms">
+          <div class="term"><div class="sample"><i class="key always"></i><span class="num" style="font-size:20px;font-weight:700">1,087</span></div><b data-i18n="g.terms.fixed"></b><p data-i18n="g.terms.fixedT"></p></div>
+          <div class="term"><div class="sample"><span class="mini-track"><i style="width:40%"></i><i class="idle" style="width:25%"></i><i class="dup" style="width:15%"></i></span></div><b data-i18n="ctx.title"></b><p data-i18n="g.terms.stripT"></p></div>
+          <div class="term"><div class="sample"><span class="tok onuse">1,586</span></div><b data-i18n="g.terms.body"></b><p data-i18n="g.terms.bodyT"></p></div>
+          <div class="term"><div class="sample"><span class="flag" data-i18n="sum.idle"></span></div><b data-i18n="sum.idle"></b><p data-i18n="g.terms.idleT"></p></div>
+          <div class="term"><div class="sample"><span class="flag" data-i18n="row.flag.dup"></span></div><b data-i18n="row.flag.dup"></b><p data-i18n="g.terms.dupT"></p></div>
+          <div class="term"><div class="sample"><span class="num" style="font-weight:650">≈ 18,070</span></div><b data-i18n="dt.measured"></b><p data-i18n="g.terms.measuredT"></p></div>
+          <div class="term"><div class="sample"><span class="agent-tag"><i class="adot" style="--c:var(--ag-codex)"></i>Codex</span></div><b data-i18n="g.terms.agent"></b><p data-i18n="g.terms.agentT"></p></div>
+          <div class="term"><div class="sample"><span class="origin-name">garrytan/gstack</span></div><b data-i18n="g.terms.origin"></b><p data-i18n-html="g.terms.originT"></p></div>
+        </div>
+      </section>
+
+      <section id="g-tidy">
+        <span class="eyebrow" data-i18n="g.eyebrow.use"></span>
+        <h2 data-i18n="toc.tidy"></h2>
+        <div class="recipes">
+          <div class="recipe">
+            <h3 data-i18n="g.tidy.idleH"></h3>
+            <p data-i18n="g.tidy.idleP"></p>
+            <div class="code"><button class="copy" data-i18n="copy"></button><pre data-i18n-html="g.tidy.idleCode"></pre></div>
+          </div>
+          <div class="recipe">
+            <h3 data-i18n="g.tidy.dupH"></h3>
+            <p data-i18n-html="g.tidy.dupP"></p>
+          </div>
+          <div class="recipe">
+            <h3 data-i18n="g.tidy.pluginH"></h3>
+            <p data-i18n="g.tidy.pluginP"></p>
+            <div class="code"><button class="copy" data-i18n="copy"></button><pre data-i18n-html="g.tidy.pluginCode"></pre></div>
+          </div>
+          <div class="recipe">
+            <h3 data-i18n="g.tidy.metaH"></h3>
+            <p data-i18n-html="g.tidy.metaP"></p>
+            <div class="code"><button class="copy" data-i18n="copy"></button><pre>{
+  "origins": { "my-notes": "https://github.com/me/notes-skill" },
+  "categories": { "my-notes": "research", "expo:*": "build" }
+}</pre></div>
+          </div>
+          <div class="recipe">
+            <h3 data-i18n="g.tidy.keepH"></h3>
+            <p data-i18n-html="g.tidy.keepP"></p>
+            <div class="code"><button class="copy" data-i18n="copy"></button><pre data-i18n-html="g.tidy.keepCode"></pre></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<div id="tip" role="tooltip" hidden></div>
+<div id="pop" role="dialog" aria-modal="false" hidden></div>
+
+<script>
+// ---------- strings: [한국어, English, 简体中文] ----------
+// A function entry gets the template variables (for English plurals). HTML entries are only ever our own text.
+const plural = (one, many) => (v) => (Number(String(v.n).replace(/\D/g, '')) === 1 ? one : many);
+const T = {
+  // top bar
+  'brand': ['스킬 대시보드', 'Skill dashboard', '技能仪表板'],
+  'title.board': ['현황판 · 스킬 대시보드', 'Overview · Skill dashboard', '概览 · 技能仪表板'],
+  'title.guide': ['사용법·개념 · 스킬 대시보드', 'Guide · Skill dashboard', '使用说明 · 技能仪表板'],
+  'nav.aria': ['페이지', 'Pages', '页面'],
+  'nav.board': ['현황판', 'Overview', '概览'],
+  'nav.guide': ['사용법·개념', 'Guide & concepts', '使用说明与概念'],
+  'toc.aria': ['목차', 'Contents', '目录'],
+  'btn.exact': ['토큰 정확히 세기', 'Count tokens exactly', '精确计算 token'],
+  'btn.refresh': ['다시 수집', 'Collect again', '重新收集'],
+  'btn.collecting': ['수집 중…', 'Collecting…', '收集中…'],
+  'theme.aria': ['화면 테마 바꾸기', 'Change color theme', '切换主题'],
+  'theme.label': ['테마: {t}', 'Theme: {t}', '主题：{t}'],
+  'theme.auto': ['자동', 'Auto', '自动'],
+  'theme.light': ['밝게', 'Light', '浅色'],
+  'theme.dark': ['어둡게', 'Dark', '深色'],
+  'lang.aria': ['언어', 'Language', '语言'],
+  'stamp.loading': ['불러오는 중…', 'Loading…', '加载中…'],
+  'stamp.first': ['대화 기록을 읽는 중… 처음 한 번은 오래 걸립니다', 'Reading transcripts… the first run takes a while', '正在读取对话记录…首次运行需要一些时间'],
+  'stamp.collected': ['{date} {time} 수집', 'Collected {date}, {time}', '{date} {time} 收集'],
+  'stamp.tip': ['대화 기록 {n}개를 읽었습니다{since}.\n저장 위치: {store}', 'Read {n} transcripts{since}.\nSaved to: {store}', '已读取 {n} 个对话记录{since}。\n保存位置：{store}'],
+  'stamp.since': [' ({date}부터)', ' (since {date})', '（自 {date} 起）'],
+  'exact.on': ['Anthropic count_tokens API({model})로 Claude Code 스킬의 토큰을 잽니다. 스킬 설명과 본문이 API로 전송되며, 바뀐 스킬만 다시 보냅니다.\n읽은 변수: {v}', 'Measures Claude Code skill tokens with the Anthropic count_tokens API ({model}). Skill descriptions and bodies are sent to the API; only changed skills are sent again.\nKey read from: {v}', '使用 Anthropic count_tokens API（{model}）测量 Claude Code 技能的 token。技能描述和正文会发送到 API，只重新发送有变化的技能。\n读取的变量：{v}'],
+  'exact.off': ['대시보드를 띄운 터미널에 SKILL_STATS_API_KEY(또는 ANTHROPIC_API_KEY)를 설정하고 서버를 다시 켜면 쓸 수 있습니다.\n사용법 → 토큰 정확히 세기', 'Set SKILL_STATS_API_KEY (or ANTHROPIC_API_KEY) in the terminal that runs the dashboard, then restart it.\nGuide → Counting tokens exactly', '在运行仪表板的终端中设置 SKILL_STATS_API_KEY（或 ANTHROPIC_API_KEY）并重启服务器后即可使用。\n使用说明 → 精确计算 token'],
+  'notice.fail': ['수집하지 못했습니다: {msg}. 대시보드 서버(node setup.mjs dashboard)가 켜져 있는지 확인하세요.', 'Could not collect: {msg}. Check that the dashboard server (node setup.mjs dashboard) is running.', '收集失败：{msg}。请确认仪表板服务器（node setup.mjs dashboard）正在运行。'],
+  'notice.exact': ['토큰을 정확히 세지 못했습니다: {msg}', 'Could not count tokens exactly: {msg}', '无法精确计算 token：{msg}'],
+  'info.aria': ['설명 보기', 'Show explanation', '查看说明'],
+  'info.of': ['{x} 설명 보기', 'Explain “{x}”', '查看“{x}”说明'],
+  'pop.more': ['사용법에서 자세히 보기 →', 'More in the guide →', '在使用说明中查看详情 →'],
+  'copy': ['복사', 'Copy', '复制'],
+  'copied': ['복사됨', 'Copied', '已复制'],
+  'copyFail': ['복사 안 됨', 'Copy failed', '复制失败'],
+  'yes': ['예', 'Yes', '是'],
+  'no': ['아니오', 'No', '否'],
+  'unit.tokens': ['토큰', 'tokens', 'token'],
+  'unit.skills': ['개', 'skills', '个'],
+  'unit.calls': ['회', 'calls', '次'],
+  'n.calls': ['{n}회', plural('{n} call', '{n} calls'), '{n} 次'],
+
+  // agents
+  'agents.label': ['코딩 에이전트', 'Coding agent', '编码智能体'],
+  'agents.all': ['전체', 'All', '全部'],
+  'sum.aria': ['요약', 'Summary', '摘要'],
+
+  // summary
+  'sum.fixed': ['요청마다 고정 비용', 'Fixed cost per request', '每次请求的固定开销'],
+  'sum.fixed.note': ['공통 자동 스킬 {n}개의 설명', 'Descriptions of {n} auto skills shared by all projects', '所有项目共用的 {n} 个自动技能的描述'],
+  'sum.fixed.proj': ['프로젝트 스킬이 있으면 최대 +{n}', 'up to +{n} in projects with their own skills', '有项目技能时最多 +{n}'],
+  'sum.fixed.delta': ['지난 수집보다 {d}', '{d} since the last collection', '比上次收集 {d}'],
+  'sum.fixed.all': ['에이전트마다 따로 보냅니다. 합치지 않았습니다.', 'Each agent sends its own list, so these are not added up.', '每个智能体各自发送，未合计。'],
+  'sum.fixed.est': ['추정', 'estimate', '估算'],
+  'sum.idle': ['정리 후보', 'Cleanup candidates', '待清理'],
+  'sum.idle.note': ['30일간 0회인 자동 스킬 · 공통 목록에서 {n} 토큰', 'Auto skills unused for 30 days · {n} tokens of the shared lists', '30 天内未调用的自动技能 · 占公共列表 {n} token'],
+  'sum.idle.show': ['보기', 'Show', '查看'],
+  'sum.calls': ['최근 30일 호출', 'Calls, last 30 days', '最近 30 天调用'],
+  'sum.calls.note': ['모델이 스스로 {m} · 사용자가 직접 {u}', 'By the model {m} · by you {u}', '模型自行调用 {m} · 用户直接调用 {u}'],
+  'sum.installed': ['설치된 스킬', 'Installed skills', '已安装技能'],
+  'sum.installed.note': ['자동 {a} (프로젝트 포함) · /명시 전용 {m} · 꺼짐·가려짐 {o}', 'Auto {a} (incl. projects) · /manual only {m} · off or shadowed {o}', '自动 {a}（含项目）· 仅 / 手动 {m} · 已关闭或被遮蔽 {o}'],
+
+  // per-agent comparison
+  'ag.title': ['에이전트별 비교', 'By agent', '按智能体对比'],
+  'ag.lead': ['에이전트마다 요청에 싣는 스킬 목록, 최근 30일 스킬 호출과 토큰 사용량입니다. 막대는 열마다 가장 큰 값을 기준으로 합니다. 행을 누르면 그 에이전트만 봅니다.', 'What each agent sends with every request, how often it used skills in the last 30 days, and how many tokens it used. Bars are scaled per column. Click a row to see only that agent.', '每个智能体随请求发送的技能列表、最近 30 天的技能调用与 token 用量。每列的条形按该列最大值缩放。点击某行即可只看该智能体。'],
+  'ag.col.agent': ['에이전트', 'Agent', '智能体'],
+  'ag.col.listing': ['요청마다 스킬 목록', 'Skill list per request', '每次请求的技能列表'],
+  'ag.col.calls': ['스킬 호출 (30일)', 'Skill calls (30 days)', '技能调用（30 天）'],
+  'ag.col.requests': ['요청 (30일)', 'Requests (30 days)', '请求（30 天）'],
+  'ag.col.input': ['입력 토큰 (30일)', 'Input tokens (30 days)', '输入 token（30 天）'],
+  'ag.col.share': ['입력 중 스킬 목록', 'Skill list share of input', '技能列表占输入'],
+  'ag.logs': ['기록 {n}개', plural('{n} transcript', '{n} transcripts'), '{n} 个记录'],
+  'ag.nologs': ['대화 기록 없음', 'No transcripts', '无对话记录'],
+  'ag.missing': ['이 PC에서 찾지 못함', 'Not found on this PC', '本机未发现'],
+  'ag.exp': ['실험적', 'experimental', '实验性'],
+  'ag.src.transcript': ['마지막 세션이 보낸 목록 기준', 'from the list its last session sent', '依据上次会话实际发送的列表'],
+  'ag.src.estimate': ['스킬 폴더로 추정', 'estimated from skill folders', '根据技能文件夹估算'],
+  'ag.src.settings': ['설정과 스킬 폴더 기준', 'from settings and skill folders', '依据设置与技能文件夹'],
+  'ag.dup': ['중복 등록 {n}개 · ≈{t} 토큰 낭비', plural('{n} duplicate · ≈{t} tokens wasted', '{n} duplicates · ≈{t} tokens wasted'), '重复登记 {n} 个 · 约浪费 {t} token'],
+  'ag.split': ['모델 {m} · 직접 {u}', 'model {m} · you {u}', '模型 {m} · 直接 {u}'],
+  'ag.sessions': ['세션 {n}개', plural('{n} session', '{n} sessions'), '{n} 个会话'],
+  'ag.output': ['출력 {n}', 'output {n}', '输出 {n}'],
+  'ag.share.tip': ['요청 수 × 요청마다 스킬 목록 ÷ 입력 토큰.\n지금 목록이 30일 내내 같았다고 본 대략치이고 프로젝트 스킬은 뺐습니다. 캐시로 읽힌 입력도 포함합니다.', 'Requests × skill list per request ÷ input tokens.\nA rough figure that assumes today’s list held for 30 days and leaves out project skills. Includes cached input.', '请求数 × 每次请求的技能列表 ÷ 输入 token。\n假设当前列表在 30 天内不变的粗略值，不含项目技能，包含缓存读取的输入。'],
+  'ag.foot': ['토큰 수는 각 에이전트 기록의 usage 값입니다. 입력에는 캐시에서 읽은 토큰도 들어 있어 요금과는 다릅니다.', 'Token counts come from each agent’s usage records. Input includes tokens read from cache, so it differs from what you are billed.', 'token 数来自各智能体记录中的 usage。输入包含从缓存读取的 token，因此与计费不同。'],
+
+  // context strip
+  'ctx.title': ['요청마다 실리는 스킬 목록', 'Skill list sent with every request', '每次请求都会附带的技能列表'],
+  'ctx.lead': ['칸 하나가 자동 스킬 하나이고, 칸 너비는 그 스킬 설명이 요청마다 차지하는 토큰입니다. 에이전트마다 따로 실립니다. 빗금 칸은 최근 30일 동안 한 번도 불리지 않은 스킬, 빨간 밑줄은 같은 이름으로 두 번 이상 등록된 스킬입니다. 칸을 누르면 아래 목록에서 그 스킬을 보여 줍니다.', 'Each cell is one auto skill; its width is the tokens its description takes on every request. Each agent sends its own list. Hatched cells were not called in the last 30 days; a red underline marks a skill listed more than once. Click a cell to find it in the list below.', '每一格是一个自动技能，宽度表示其描述在每次请求中占用的 token。每个智能体各自发送列表。斜线格表示最近 30 天未被调用，红色下划线表示同名技能被登记了不止一次。点击格子可在下方列表中查看。'],
+  'ctx.all': ['모든 프로젝트', 'All projects', '所有项目'],
+  'ctx.all.sub': ['어디서 요청하든 들어감', 'sent from anywhere', '在任何位置请求都会发送'],
+  'ctx.proj.sub': ['이 프로젝트에서 요청할 때', 'when working in this project', '在此项目中请求时'],
+  'ctx.common': ['공통 {n}', 'shared {n}', '公共 {n}'],
+  'ctx.seg': ['{name}\n요청마다 {n} 토큰 · 최근 30일 {u}회', '{name}\n{n} tokens per request · {u} calls in 30 days', '{name}\n每次请求 {n} token · 最近 30 天 {u} 次'],
+  'ctx.seg.idle': [' (정리 후보)', ' (cleanup candidate)', '（待清理）'],
+  'ctx.seg.dup': ['\n같은 이름으로 두 번 이상 등록됨', '\nlisted more than once under this name', '\n同名技能被登记了不止一次'],
+  'ctx.legend.used': ['최근 30일에 쓴 자동 스킬', 'Auto skill used in the last 30 days', '最近 30 天用过的自动技能'],
+  'ctx.legend.idle': ['30일간 안 쓴 자동 스킬 (정리 후보)', 'Auto skill unused for 30 days (cleanup candidate)', '30 天未用的自动技能（待清理）'],
+  'ctx.legend.dup': ['중복 등록', 'Listed twice', '重复登记'],
+  'ctx.legend.base': ['모든 프로젝트 공통분', 'Shared by all projects', '所有项目公共部分'],
+  'ctx.empty': ['요청마다 들어가는 자동 스킬이 없습니다', 'No auto skills are sent with requests', '没有随请求发送的自动技能'],
+
+  // daily chart
+  'daily.metric.aria': ['보여 줄 값', 'Metric', '显示指标'],
+  'daily.metric.calls': ['스킬 호출', 'Skill calls', '技能调用'],
+  'daily.metric.tokens': ['토큰 사용량', 'Token usage', 'token 用量'],
+  'daily.title.calls': ['최근 30일 호출', 'Calls in the last 30 days', '最近 30 天调用'],
+  'daily.title.tokens': ['최근 30일 토큰 사용량', 'Tokens used in the last 30 days', '最近 30 天 token 用量'],
+  'daily.lead.calls': ['하루에 스킬이 몇 번 불렸는지 에이전트별로 쌓았습니다. 모델이 스스로 부른 것과 사용자가 직접 부른 것을 합쳤습니다.', 'Skill calls per day, stacked by agent. Calls by the model and by you are added together.', '按智能体堆叠的每日技能调用次数，包括模型自行调用和用户直接调用。'],
+  'daily.lead.tokens': ['하루에 쓴 입력과 출력 토큰을 에이전트별로 쌓았습니다. 입력에는 캐시에서 읽은 토큰도 들어 있습니다.', 'Input plus output tokens per day, stacked by agent. Input includes tokens read from cache.', '按智能体堆叠的每日输入与输出 token。输入包含从缓存读取的 token。'],
+  'daily.total': ['합계', 'Total', '合计'],
+  'daily.empty': ['최근 30일 기록이 없습니다', 'Nothing recorded in the last 30 days', '最近 30 天没有记录'],
+  'daily.aria': ['최근 30일 일별 {what}, 합계 {n}', 'Daily {what} over the last 30 days, total {n}', '最近 30 天每日{what}，合计 {n}'],
+
+  // top
+  'top.title': ['많이 쓴 스킬', 'Most used skills', '最常用技能'],
+  'top.aside': ['최근 30일', 'Last 30 days', '最近 30 天'],
+  'top.lead': ['이름을 누르면 아래 목록에서 자세히 보여 줍니다.', 'Click a name to open it in the list below.', '点击名称可在下方列表中查看详情。'],
+  'top.empty': ['최근 30일에 불린 스킬이 없습니다', 'No skills were called in the last 30 days', '最近 30 天没有调用过技能'],
+
+  // ledger
+  'led.title': ['스킬 목록', 'All skills', '技能列表'],
+  'led.view.aria': ['묶는 방식', 'Group by', '分组方式'],
+  'led.view.category': ['분류별', 'By category', '按分类'],
+  'led.view.origin': ['출처별', 'By source', '按来源'],
+  'led.view.flat': ['전체 목록', 'Flat list', '完整列表'],
+  'led.search': ['스킬 이름, 하는 일, 출처로 찾기', 'Search by name, purpose, or source', '按名称、用途或来源搜索'],
+  'led.search.aria': ['스킬 찾기', 'Find skills', '查找技能'],
+  'led.mode.aria': ['호출 방식', 'Invocation', '调用方式'],
+  'led.mode.all': ['모든 호출 방식', 'Any invocation', '全部调用方式'],
+  'led.mode.auto': ['자동', 'Auto', '自动'],
+  'led.mode.manual': ['/명시 전용', '/Manual only', '仅 / 手动'],
+  'led.mode.off': ['꺼짐·가려짐', 'Off or shadowed', '已关闭或被遮蔽'],
+  'led.scope.aria': ['설치 위치', 'Location', '安装位置'],
+  'led.scope.all': ['모든 위치', 'All locations', '全部位置'],
+  'led.scope.user': ['전역', 'Global', '全局'],
+  'led.scope.project': ['프로젝트', 'Project', '项目'],
+  'led.scope.plugin': ['플러그인', 'Plugin', '插件'],
+  'led.scope.system': ['기본 제공', 'Built-in', '内置'],
+  'led.scope.other': ['미설치 (기록에만 있음)', 'Not installed (history only)', '未安装（仅在记录中）'],
+  'led.cat.aria': ['분류', 'Category', '分类'],
+  'led.cat.all': ['모든 분류', 'All categories', '全部分类'],
+  'led.idle': ['정리 후보만', 'Cleanup candidates only', '仅待清理'],
+  'led.dup': ['중복 등록만', 'Duplicates only', '仅重复登记'],
+  'led.count': ['{n}개 표시 · 전체 {t}개', 'Showing {n} of {t}', '显示 {n} 个 · 共 {t} 个'],
+  'led.reset': ['필터 초기화', 'Reset filters', '重置筛选'],
+  'led.empty': ['조건에 맞는 스킬이 없습니다. 필터를 초기화해 보세요.', 'No skills match. Try resetting the filters.', '没有符合条件的技能。请尝试重置筛选。'],
+  'grp.count': ['<b>{n}</b>개', plural('<b>{n}</b> skill', '<b>{n}</b> skills'), '<b>{n}</b> 个'],
+  'grp.tokens': ['요청마다 <b>{n}</b>', '<b>{n}</b> per request', '每次请求 <b>{n}</b>'],
+  'grp.calls': ['30일 <b>{n}</b>회', '<b>{n}</b> calls / 30 days', '30 天 <b>{n}</b> 次'],
+  'grp.idle': ['정리 후보 {n}', '{n} to clean up', '待清理 {n}'],
+  'col.name': ['스킬', 'Skill', '技能'],
+  'col.name.tip': ['이름과 하는 일', 'Name and what it does', '名称与用途'],
+  'col.origin': ['출처 · 설치 위치', 'Source · location', '来源 · 安装位置'],
+  'col.origin.tip': ['윗줄: 스킬을 만든 곳\n아랫줄: 에이전트와 이 PC에서 설치된 곳', 'Top: where the skill came from\nBottom: the agent, and where it is installed', '上行：技能的来源\n下行：智能体及安装位置'],
+  'col.mode': ['호출 방식', 'Invocation', '调用方式'],
+  'col.mode.tip': ['자동: 요청마다 설명이 들어가고 모델이 알아서 부름\n/명시 전용: 이름으로만 실행, 요청마다 드는 토큰 없음', 'Auto: the description goes with every request and the model calls it on its own\n/Manual only: runs only by name, costs nothing per request', '自动：描述随每次请求发送，由模型自行调用\n仅 / 手动：只能按名称运行，不占用每次请求的 token'],
+  'col.listing': ['요청마다', 'Per request', '每次请求'],
+  'col.listing.tip': ['자동일 때 이 스킬 설명이 요청마다 차지하는 토큰', 'Tokens its description takes on every request while it is auto', '处于自动时，其描述在每次请求中占用的 token'],
+  'col.body': ['호출 시', 'On call', '调用时'],
+  'col.body.tip': ['스킬을 부를 때 들어가는 SKILL.md 본문 토큰', 'Tokens of the SKILL.md body added when it is called', '调用时加入的 SKILL.md 正文 token'],
+  'col.uses': ['최근 30일', 'Last 30 days', '最近 30 天'],
+  'col.uses.tip': ['최근 30일 호출 수와 일별 추이', 'Calls in the last 30 days, with the daily trend', '最近 30 天的调用次数与每日趋势'],
+  'col.last': ['마지막 호출', 'Last call', '最近调用'],
+  'col.last.tip': ['가장 최근에 불린 때', 'When it was last called', '最近一次被调用的时间'],
+  'row.noDesc': ['설명이 없습니다', 'No description', '无描述'],
+  'row.notInstalled': ['지금은 설치돼 있지 않습니다. 내장 스킬이거나, 쓴 뒤에 지운 스킬입니다.', 'Not installed now. Either built in, or removed after it was used.', '当前未安装。可能是内置技能，或使用后已删除。'],
+  'row.flag.idle': ['정리 후보', 'Cleanup candidate', '待清理'],
+  'row.flag.dup': ['중복 등록', 'Listed twice', '重复登记'],
+  'row.never': ['기록 없음', 'Never', '无记录'],
+  'ago.today': ['오늘', 'today', '今天'],
+  'ago.yesterday': ['어제', 'yesterday', '昨天'],
+  'ago.days': ['{n}일 전', '{n} days ago', '{n} 天前'],
+  'dt.origin': ['출처', 'Source', '来源'],
+  'dt.where': ['설치 위치', 'Location', '安装位置'],
+  'dt.agent': ['에이전트', 'Agent', '智能体'],
+  'dt.category': ['분류', 'Category', '分类'],
+  'dt.mode': ['호출 방식', 'Invocation', '调用方式'],
+  'dt.calls': ['호출 기록', 'Call history', '调用记录'],
+  'dt.measured': ['호출 1회 실측', 'Measured per call', '单次调用实测'],
+  'dd.calls': ['전체 {n}회 · 모델이 스스로 {m} · 사용자가 직접 {u}', '{n} in total · by the model {m} · by you {u}', '共 {n} 次 · 模型自行 {m} · 用户直接 {u}'],
+  'dd.projectCalls': ['{p} {n}회', '{p}: {n}', '{p} {n} 次'],
+  'dd.measured': ['<span class="tok">≈ {n}</span> 토큰 (중앙값)', '<span class="tok">≈ {n}</span> tokens (median)', '<span class="tok">≈ {n}</span> token（中位数）'],
+  'dd.noMeasure': ['아직 측정된 호출이 없습니다', 'No measured calls yet', '尚无实测调用'],
+  'dd.dup': ['같은 이름이 목록에 두 번 이상 있어, 설명 토큰이 요청마다 그만큼 더 나갑니다.', 'The same name is listed more than once, so its description is paid for more than once on every request.', '同名技能在列表中出现不止一次，每次请求都会多次计入其描述 token。'],
+  'dd.chart': ['최근 30일 호출', 'Calls in the last 30 days', '最近 30 天调用'],
+  'dd.30ago': ['30일 전', '30 days ago', '30 天前'],
+  'policy.manual': ['policy.json의 manualSkills에 있어 /명시 전용으로 고정됩니다.', 'In manualSkills of policy.json, so it stays /manual only.', '位于 policy.json 的 manualSkills 中，固定为仅 / 手动。'],
+  'policy.off': ['policy.json의 offSkills에 있어 꺼짐으로 고정됩니다.', 'In offSkills of policy.json, so it stays off.', '位于 policy.json 的 offSkills 中，固定为关闭。'],
+  'policy.local-only': ['policy.json의 localOnlySkills에 있어 지정한 프로젝트에만 둡니다.', 'In localOnlySkills of policy.json, so it lives only in the chosen projects.', '位于 policy.json 的 localOnlySkills 中，只保留在指定项目里。'],
+
+  // where / origin
+  'where.user': ['전역', 'Global', '全局'],
+  'where.system': ['기본 제공', 'Built-in', '内置'],
+  'where.project': ['{p} 프로젝트', 'project {p}', '项目 {p}'],
+  'where.plugin': ['플러그인', 'Plugin', '插件'],
+  'where.projectPlugin': ['{p} 프로젝트 플러그인', 'plugin in project {p}', '项目 {p} 的插件'],
+  'where.other': ['설치돼 있지 않음', 'Not installed', '未安装'],
+  'origin.plugin': ['{p} 플러그인', '{p} plugin', '{p} 插件'],
+  'origin.local': ['직접 추가', 'Added by hand', '手动添加'],
+  'origin.project': ['{p} 저장소', '{p} repository', '{p} 仓库'],
+  'origin.builtin': ['{p} 기본 제공', 'Built into {p}', '{p} 内置'],
+  'origin.unknown': ['내장 또는 삭제됨', 'Built in or removed', '内置或已删除'],
+  'via.set': ["스킬 세트 '{s}'", "skill set '{s}'", "技能集 '{s}'"],
+  'via.marketplace': ['마켓플레이스 {m}{r}', 'marketplace {m}{r}', '市场 {m}{r}'],
+  'via.pack': ['{p} 묶음', '{p} pack', '{p} 套件'],
+  'via.git': ['git 원격 주소', 'git remote', 'git 远程地址'],
+  'via.none': ['설치 기록 없음', 'no install record', '无安装记录'],
+  'via.inline': ['프로젝트에 직접 포함', 'committed in the project', '直接包含在项目中'],
+  'via.meta': ['skill-meta 파일', 'skill-meta file', 'skill-meta 文件'],
+  'via.builtin': ['에이전트와 함께 설치됨', 'ships with the agent', '随智能体一起安装'],
+
+  // modes
+  'mode.on': ['자동', 'Auto', '自动'],
+  'mode.on.text': ['모델이 설명을 보고 알아서 부릅니다. 설명이 요청마다 들어갑니다.', 'The model reads the description and calls it on its own. The description goes with every request.', '模型根据描述自行调用。描述会随每次请求发送。'],
+  'mode.name-only': ['이름만', 'Name only', '仅名称'],
+  'mode.name-only.text': ['이름만 목록에 들어가고 설명은 빠집니다.', 'Only the name is listed; the description is left out.', '列表中只有名称，不含描述。'],
+  'mode.user-invocable-only': ['/명시 전용', '/Manual only', '仅 / 手动'],
+  'mode.user-invocable-only.text': ['/이름을 입력할 때만 실행됩니다. 요청마다 드는 토큰이 없습니다.', 'Runs only when you type /name. Costs nothing per request.', '只有输入 /名称 时才会运行。不占用每次请求的 token。'],
+  'mode.off': ['꺼짐', 'Off', '已关闭'],
+  'mode.off.text': ['완전히 숨겨져 있습니다.', 'Hidden completely.', '已完全隐藏。'],
+  'mode.plugin-off': ['플러그인 꺼짐', 'Plugin off', '插件已关闭'],
+  'mode.plugin-off.text': ['이 스킬이 든 플러그인이 꺼져 있습니다.', 'The plugin that contains it is turned off.', '包含此技能的插件已关闭。'],
+  'mode.shadowed': ['가려짐', 'Shadowed', '被遮蔽'],
+  'mode.shadowed.text': ['같은 이름의 전역 스킬이 대신 쓰입니다.', 'A global skill with the same name is used instead.', '改用同名的全局技能。'],
+  'mode.not-installed': ['미설치', 'Not installed', '未安装'],
+  'mode.not-installed.text': ['대화 기록에만 남아 있습니다. 내장 스킬이거나 지운 스킬입니다.', 'Only in the transcripts. Either built in or deleted.', '仅存在于对话记录中。可能是内置或已删除的技能。'],
+
+  // categories
+  'cat.plan': ['기획·설계', 'Planning & design', '规划与设计'],
+  'cat.plan.hint': ['아이디어 정리, 요구사항, 설계와 계획 검토', 'Ideas, requirements, design and plan reviews', '整理想法、需求、设计与计划评审'],
+  'cat.build': ['구현', 'Building', '实现'],
+  'cat.build.hint': ['코드 작성, TDD, 계획 실행, 리팩터링', 'Writing code, TDD, executing plans, refactoring', '编写代码、TDD、执行计划、重构'],
+  'cat.debug': ['디버깅·조사', 'Debugging', '调试与排查'],
+  'cat.debug.hint': ['버그 원인 찾기, 장애 조사', 'Finding root causes, investigating incidents', '查找缺陷原因、排查故障'],
+  'cat.review': ['리뷰·보안·품질', 'Review, security & quality', '评审、安全与质量'],
+  'cat.review.hint': ['코드 리뷰, 보안 점검, 성능·품질 확인', 'Code review, security checks, performance and quality', '代码评审、安全检查、性能与质量'],
+  'cat.test': ['테스트·브라우저', 'Testing & browser', '测试与浏览器'],
+  'cat.test.hint': ['QA, 브라우저 자동화, 스크린샷', 'QA, browser automation, screenshots', 'QA、浏览器自动化、截图'],
+  'cat.ship': ['배포·Git', 'Shipping & Git', '发布与 Git'],
+  'cat.ship.hint': ['PR, 머지, CI, 배포, 릴리스', 'PRs, merges, CI, deploys, releases', 'PR、合并、CI、部署、发布'],
+  'cat.design': ['디자인·UI', 'Design & UI', '设计与 UI'],
+  'cat.design.hint': ['화면 설계, 프로토타입, 시각 자료', 'Screens, prototypes, visuals', '界面设计、原型、视觉素材'],
+  'cat.docs': ['문서·오피스', 'Documents & Office', '文档与办公'],
+  'cat.docs.hint': ['Word, PDF, PowerPoint, Excel, 문서 작성', 'Word, PDF, PowerPoint, Excel, writing documents', 'Word、PDF、PowerPoint、Excel、文档写作'],
+  'cat.data': ['데이터·분석', 'Data & analysis', '数据与分析'],
+  'cat.data.hint': ['CSV, SQL, 차트', 'CSV, SQL, charts', 'CSV、SQL、图表'],
+  'cat.research': ['리서치·글쓰기', 'Research & writing', '调研与写作'],
+  'cat.research.hint': ['자료 조사, 요약, 글쓰기', 'Research, summaries, writing', '资料调研、摘要、写作'],
+  'cat.work': ['업무·생산성', 'Work & productivity', '工作与效率'],
+  'cat.work.hint': ['회고, 파일 정리, 비즈니스 문서', 'Retros, file organizing, business documents', '复盘、文件整理、商务文档'],
+  'cat.agent': ['에이전트·도구 관리', 'Agents & tooling', '智能体与工具管理'],
+  'cat.agent.hint': ['스킬·플러그인·세션 관리, 안전장치', 'Managing skills, plugins, sessions; safety guards', '管理技能、插件、会话与安全防护'],
+  'cat.other': ['기타', 'Other', '其他'],
+  'cat.other.hint': ['분류하지 못한 스킬 (skill-meta.local.json에서 지정)', 'Not classified (set it in skill-meta.local.json)', '未能分类的技能（可在 skill-meta.local.json 中指定）'],
+
+  // info popovers
+  'i.fixed.t': ['요청마다 고정 비용', 'Fixed cost per request', '每次请求的固定开销'],
+  'i.fixed.1': ['자동 스킬의 이름과 설명은 스킬을 쓰든 안 쓰든 요청마다 모델에게 전달됩니다.', 'The names and descriptions of auto skills go to the model with every request, whether or not a skill is used.', '无论是否使用，自动技能的名称和描述都会随每次请求发送给模型。'],
+  'i.fixed.2': ['에이전트마다 자기 목록을 따로 보냅니다. 이 숫자는 모든 프로젝트에 공통으로 들어가는 양이고, 프로젝트 스킬이 있는 곳에서는 더 늘어납니다.', 'Each agent sends its own list. This is the part shared by every project; projects with their own skills add more.', '每个智能体各自发送列表。这里是所有项目共用的部分；有项目技能的地方还会更多。'],
+  'i.idle.t': ['정리 후보', 'Cleanup candidates', '待清理'],
+  'i.idle.1': ['자동 스킬인데 최근 30일 동안 한 번도 불리지 않은 스킬입니다.', 'Auto skills that were not called even once in the last 30 days.', '最近 30 天内一次都没被调用的自动技能。'],
+  'i.idle.2': ['쓰지 않는데 설명 토큰만 요청마다 나가고 있으니 /명시 전용으로 바꾸거나 끄는 것을 검토하세요.', 'They cost description tokens on every request without being used. Consider making them /manual only or turning them off.', '它们没被使用却在每次请求中消耗描述 token。可考虑改为仅 / 手动或关闭。'],
+  'i.calls.t': ['최근 30일 호출', 'Calls, last 30 days', '最近 30 天调用'],
+  'i.calls.1': ['모델이 스스로 부른 횟수와 사용자가 직접(/이름, $이름) 부른 횟수의 합입니다.', 'Calls the model made on its own, plus calls you made by name (/name, $name).', '模型自行调用的次数加上用户按名称（/名称、$名称）直接调用的次数。'],
+  'i.calls.2': ['이 PC에 있는 각 에이전트의 대화 기록에서 셉니다. 서브에이전트가 부른 것도 포함합니다.', 'Counted from each agent’s transcripts on this PC, including subagents.', '从本机各智能体的对话记录中统计，包括子智能体。'],
+  'i.installed.t': ['설치된 스킬', 'Installed skills', '已安装技能'],
+  'i.installed.1': ['에이전트별로 전역, 프로젝트, 플러그인, 기본 제공 스킬을 센 수입니다. 같은 스킬이 두 에이전트에 있으면 두 번 셉니다.', 'Global, project, plugin, and built-in skills counted per agent. A skill present in two agents counts twice.', '按智能体统计的全局、项目、插件和内置技能数量。同一技能存在于两个智能体中会计两次。'],
+  'i.installed.2': ['자동 스킬만 요청마다 토큰을 씁니다. /명시 전용과 꺼진 스킬은 쓰지 않습니다.', 'Only auto skills cost tokens on every request. /Manual-only and turned-off skills do not.', '只有自动技能会在每次请求中消耗 token；仅 / 手动和已关闭的技能不会。'],
+  'i.ctx.t': ['요청마다 실리는 스킬 목록', 'Skill list sent with every request', '每次请求附带的技能列表'],
+  'i.ctx.1': ['에이전트마다 "모든 프로젝트" 줄이 요청마다 들어가는 공통 목록입니다.', 'For each agent, the “All projects” row is the list shared by every request.', '每个智能体的“所有项目”一行是每次请求都会发送的公共列表。'],
+  'i.ctx.2': ['그 아래 줄은 해당 프로젝트에서 요청할 때입니다. 공통분(회색) 뒤에 그 프로젝트의 스킬이 더 붙습니다.', 'The rows below are for working inside a project: its own skills are added after the shared part (gray).', '下面几行是在某个项目中请求的情况：在公共部分（灰色）之后再加上该项目的技能。'],
+  'i.ledger.t': ['스킬 목록 읽는 법', 'Reading the skill list', '如何阅读技能列表'],
+  'i.ledger.1': ['요청마다: 자동일 때 요청마다 드는 토큰. 호출 시: 부를 때 들어가는 본문 토큰.', 'Per request: tokens on every request while auto. On call: body tokens added when called.', '每次请求：处于自动时每次请求的 token。调用时：调用时加入的正文 token。'],
+  'i.ledger.2': ['행을 누르면 전체 설명, 출처 링크, 프로젝트별 호출 수, 호출 1회 실측이 펼쳐집니다.', 'Click a row for the full description, source link, calls per project, and the measured cost per call.', '点击某行可展开完整描述、来源链接、各项目调用次数和单次调用实测。'],
+  'i.measured.t': ['호출 1회 실측', 'Measured per call', '单次调用实测'],
+  'i.measured.1': ['대화 기록의 실제 사용량에서, 스킬을 부르기 직전 요청과 본문이 들어간 직후 요청의 입력 토큰 차이(중앙값)입니다.', 'From the real usage in transcripts: input tokens of the request right after the body arrived, minus the one right before the call (median).', '取自对话记录中的实际用量：正文进入后的请求与调用前请求的输入 token 差（中位数）。'],
+  'i.measured.2': ['그 사이의 도구 결과나 사용자 입력도 섞이므로 최대치로 읽습니다.', 'Tool results or your own input in between are mixed in, so read it as an upper bound.', '其间的工具结果或用户输入也会混入，因此请视为上限。'],
+  'i.agents.t': ['에이전트별 비교', 'By agent', '按智能体对比'],
+  'i.agents.1': ['각 에이전트의 대화 기록에서 스킬 호출과, 요청마다 기록된 토큰 사용량(usage)을 모았습니다.', 'Skill calls and the per-request token usage are read from each agent’s transcripts.', '从各智能体的对话记录中收集技能调用和每次请求记录的 token 用量（usage）。'],
+  'i.agents.2': ['에이전트마다 기록 위치와 세는 방법이 다릅니다.', 'Each agent keeps its logs in a different place and is counted slightly differently.', '各智能体的记录位置和统计方式略有不同。'],
+
+  // guide: shared
+  'toc.start': ['이 대시보드로 알 수 있는 것', 'What this dashboard tells you', '本仪表板能告诉你什么'],
+  'toc.flow': ['스킬이 불리는 흐름', 'How a skill gets called', '技能如何被调用'],
+  'toc.cost': ['토큰이 드는 두 가지 방식', 'Two ways skills cost tokens', '技能消耗 token 的两种方式'],
+  'toc.modes': ['호출 방식', 'Invocation modes', '调用方式'],
+  'toc.homes': ['스킬이 있는 곳과 우선순위', 'Where skills live, and which wins', '技能的位置与优先级'],
+  'toc.data': ['숫자가 만들어지는 과정', 'Where the numbers come from', '数字从何而来'],
+  'toc.agents': ['코딩 에이전트별 수집 방법', 'How each coding agent is collected', '各编码智能体的收集方式'],
+  'toc.exact': ['토큰 정확히 세기: 환경 변수 설정', 'Counting tokens exactly: environment variables', '精确计算 token：设置环境变量'],
+  'toc.terms': ['현황판 용어', 'Overview terms', '概览术语'],
+  'toc.tidy': ['이렇게 정리하세요', 'How to tidy up', '如何清理'],
+  'g.eyebrow.how': ['원리', 'How it works', '原理'],
+  'g.eyebrow.key': ['핵심 개념', 'Key idea', '核心概念'],
+  'g.eyebrow.concept': ['개념', 'Concept', '概念'],
+  'g.eyebrow.collect': ['수집', 'Collection', '收集'],
+  'g.eyebrow.setup': ['설정', 'Setup', '设置'],
+  'g.eyebrow.read': ['현황판 읽는 법', 'Reading the overview', '如何阅读概览'],
+  'g.eyebrow.use': ['사용법', 'How to', '用法'],
+
+  // guide: start
+  'g.start.h': ['스킬은 쓰지 않아도 토큰을 씁니다', 'Skills cost tokens even when unused', '技能即使不用也会消耗 token'],
+  'g.start.intro': ['Claude Code와 Codex 같은 코딩 에이전트는 요청마다 자동 스킬의 설명을 함께 보냅니다. 그래서 스킬이 늘수록 모든 대화가 조금씩 무거워집니다. 이 대시보드는 그 비용이 에이전트와 스킬마다 얼마인지, 그리고 그만큼 실제로 쓰이는지 보여 줍니다.', 'Coding agents such as Claude Code and Codex send the descriptions of their auto skills with every request, so each skill you add makes every conversation a little heavier. This dashboard shows what that costs per agent and per skill, and whether the skills are actually used.', 'Claude Code、Codex 等编码智能体在每次请求时都会附带自动技能的描述，因此技能越多，每次对话就越重。本仪表板按智能体和技能展示这部分开销，以及这些技能是否真的被使用。'],
+  'g.start.q1': ['어떤 스킬이 있나', 'What is installed', '有哪些技能'],
+  'g.start.q1s': ['에이전트별 전역·프로젝트·플러그인 스킬 전부와 각 스킬의 출처, 하는 일, 호출 방식.', 'Every global, project, and plugin skill for each agent, with its source, purpose, and invocation mode.', '每个智能体的全部全局、项目和插件技能，以及各自的来源、用途和调用方式。'],
+  'g.start.q2': ['얼마나 쓰이나', 'How often it is used', '使用频率'],
+  'g.start.q2s': ['대화 기록에서 센 호출 수. 모델이 스스로 부른 것과 사용자가 직접 부른 것.', 'Calls counted from transcripts: made by the model on its own, or by you directly.', '从对话记录统计的调用次数：模型自行调用和用户直接调用。'],
+  'g.start.q3': ['토큰을 얼마나 먹나', 'What it costs', '消耗多少 token'],
+  'g.start.q3s': ['요청마다 드는 토큰과 호출할 때 드는 토큰. 지금 이 PC는 요청마다 <span class="live" data-live="listing">…</span>.', 'Tokens on every request, and tokens when called. On this PC, every request carries <span class="live" data-live="listing">…</span>.', '每次请求的 token 与调用时的 token。本机每次请求携带 <span class="live" data-live="listing">…</span>。'],
+
+  // guide: flow
+  'g.flow.p': ['스킬이 실행되는 길은 두 가지입니다. 모델이 요청을 읽고 목록에서 맞는 스킬을 고르는 길, 그리고 사용자가 이름으로 직접 부르는 길(Claude Code는 <code>/이름</code>, Codex는 <code>$이름</code>)입니다. 어느 쪽이든 마지막에는 SKILL.md 본문이 대화에 들어갑니다.', 'A skill runs in one of two ways: the model reads your request and picks a matching skill from the list, or you call it by name (<code>/name</code> in Claude Code, <code>$name</code> in Codex). Either way, the SKILL.md body ends up in the conversation.', '技能有两种运行方式：模型读取请求后从列表中挑选合适的技能，或者用户按名称直接调用（Claude Code 用 <code>/名称</code>，Codex 用 <code>$名称</code>）。无论哪种，SKILL.md 正文最终都会进入对话。'],
+  'd1.title': ['요청마다 스킬 목록이 전달되고, 모델이 스킬을 고르면 스킬을 불러와 SKILL.md 본문이 대화에 들어간다. 사용자가 이름으로 불러도 본문이 들어간다.', 'The skill list goes with every request. If the model picks a skill, it loads it and the SKILL.md body joins the conversation. Calling it by name does the same.', '技能列表随每次请求发送。模型选中技能后会加载它，SKILL.md 正文进入对话；用户按名称调用也一样。'],
+  'd1.list': ['스킬 목록을 함께 보냄', 'Sends the skill list', '附带发送技能列表'],
+  'd1.list.sub': ['자동 스킬의 이름과 설명', 'auto skill names + descriptions', '自动技能的名称和描述'],
+  'd1.pick1': ['모델이', 'Model picks', '模型'],
+  'd1.pick2': ['스킬을 고름', 'a skill?', '选择技能'],
+  'd1.yes': ['있음', 'yes', '是'],
+  'd1.no': ['없음', 'no', '否'],
+  'd1.load': ['스킬 불러오기', 'Loads the skill', '加载技能'],
+  'd1.load.sub': ['Skill 도구 · 파일 읽기', 'Skill tool / file read', 'Skill 工具 · 读取文件'],
+  'd1.body1': ['SKILL.md 본문이', 'SKILL.md body', 'SKILL.md 正文'],
+  'd1.body2': ['대화에 들어감', 'joins the chat', '进入对话'],
+  'd1.work1': ['본문 지시대로', 'Works as the', '按正文指示'],
+  'd1.work2': ['작업', 'body says', '工作'],
+  'd1.none': ['스킬 없이 진행', 'No skill used', '不使用技能'],
+  'd1.user': ['사용자가 직접 부름', 'You call it by name', '用户直接调用'],
+  'd1.user.sub': ['/이름 · $이름', '/name or $name', '/名称 · $名称'],
+  'd1.always1': ['요청마다 반복', 'Every request', '每次请求都重复'],
+  'd1.always2': ['→ 항상 드는 토큰', '→ always-on tokens', '→ 常驻 token'],
+  'd1.onuse1': ['호출할 때 한 번', 'Once, when called', '调用时一次'],
+  'd1.onuse2': ['→ 쓸 때 드는 토큰', '→ on-use tokens', '→ 调用时 token'],
+  'g.flow.cap': ['/명시 전용이나 꺼진 스킬은 왼쪽 목록에 들어가지 않습니다. 그래서 모델이 고를 수 없고, /명시 전용 스킬은 아래쪽 길(사용자가 직접 부름)로만 실행됩니다.', '/Manual-only and turned-off skills are not in the list on the left, so the model cannot pick them; /manual-only skills run only through the bottom path, when you call them.', '仅 / 手动和已关闭的技能不在左侧列表中，模型无法选择；仅 / 手动技能只能通过下方路径（用户直接调用）运行。'],
+
+  // guide: cost
+  'g.cost.p': ['한 대화에서 요청을 여러 번 보내는 모습을 막대로 그렸습니다. 막대 하나가 요청 하나에 실린 입력 전체입니다. 호박색 스킬 목록은 모든 막대에 똑같이 들어갑니다. 청록색 본문은 스킬을 부른 요청부터 들어가서 대화가 끝날 때까지 남습니다.', 'The bars show one conversation sending several requests; each bar is the whole input of one request. The amber skill list is in every bar at the same size. The teal body appears from the request where the skill is called and stays until the conversation ends.', '下图用条形表示一次对话中的多次请求，每个条形是一次请求的全部输入。琥珀色的技能列表在每个条形中大小相同；青绿色的正文从调用技能的请求开始出现，并一直保留到对话结束。'],
+  'd2.title': ['요청 1부터 6까지의 입력 구성. 시스템 프롬프트와 스킬 목록은 모든 요청에 같은 크기로 들어가고, 요청 3에서 스킬을 부른 뒤로 SKILL.md 본문이 계속 들어간다. 대화 내용은 요청마다 늘어난다.', 'Input of requests 1 to 6. The system prompt and skill list are the same size in every request; after the skill is called in request 3, the SKILL.md body stays. The conversation grows with each request.', '请求 1 到 6 的输入构成。系统提示词和技能列表在每次请求中大小相同；请求 3 调用技能后，SKILL.md 正文一直保留。对话内容随请求增长。'],
+  'd2.note': ['예시 그림 · 실제 비율이 아닙니다', 'Illustration · not to scale', '示意图 · 非实际比例'],
+  'd2.measured': ['호출 1회 실측', 'Measured per call', '单次调用实测'],
+  'd2.measured.sub': ['직전 요청과 직후 요청의 입력 차이', 'input right after minus right before', '调用前后请求的输入差'],
+  'd2.conv': ['대화 내용', 'Conversation', '对话内容'],
+  'd2.conv.sub': ['요청할수록 늘어남', 'grows with every request', '随请求增长'],
+  'd2.body': ['SKILL.md 본문', 'SKILL.md body', 'SKILL.md 正文'],
+  'd2.body.sub': ['부른 뒤로 계속 남음 → 쓸 때 드는 토큰', 'stays once called → on-use tokens', '调用后一直保留 → 调用时 token'],
+  'd2.list': ['스킬 목록', 'Skill list', '技能列表'],
+  'd2.list.sub': ['요청마다 똑같이 → 항상 드는 토큰', 'same every request → always-on', '每次请求相同 → 常驻 token'],
+  'd2.sys': ['시스템 프롬프트·도구', 'System prompt & tools', '系统提示词与工具'],
+  'd2.sys.sub': ['기본으로 들어가는 부분', 'always there', '默认包含的部分'],
+  'd2.req': ['요청 {n}', 'Req. {n}', '请求 {n}'],
+  'd2.call': ['스킬 호출', 'Skill call', '技能调用'],
+  'g.cost.cap': ['지금 이 PC에서는 요청마다 스킬 목록 <span class="live" data-live="listing">…</span>이 들어갑니다. 현황판의 "호출 1회 실측"은 화살표 구간의 크기입니다. 그 사이에 들어간 도구 결과나 사용자 입력도 섞이므로 "최대 이 정도"로 읽습니다.', 'On this PC, every request carries a skill list of <span class="live" data-live="listing">…</span>. “Measured per call” on the overview is the size of the arrow span. Tool results or your input in between are mixed in, so read it as “at most this much”.', '本机每次请求携带的技能列表为 <span class="live" data-live="listing">…</span>。概览中的“单次调用实测”就是箭头区间的大小。其间的工具结果或用户输入也会混入，因此请理解为“最多这么多”。'],
+  'g.cost.p2': ['그래서 정리하는 기준은 두 가지입니다. 자주 쓰는 스킬은 자동으로 두고, 가끔만 쓰는 스킬은 /명시 전용으로 바꿔 항상 드는 토큰을 0으로 만듭니다. 호출할 때 드는 토큰은 실제로 쓸 때만 나가므로 크게 걱정하지 않아도 됩니다.', 'So there are two rules for tidying up. Keep skills you use often on auto; switch the ones you use now and then to /manual only so their always-on cost drops to zero. On-use tokens are only spent when you actually use a skill, so they are rarely the problem.', '因此清理的原则有两条：常用技能保持自动；偶尔使用的技能改为仅 / 手动，让常驻 token 变为 0。调用时 token 只在真正使用时产生，通常不必担心。'],
+
+  // guide: modes
+  'g.modes.p': ['현황판의 "호출 방식" 열은 스킬이 어떤 길로 실행될 수 있는지, 그리고 요청마다 토큰을 쓰는지 알려 줍니다. 점 색은 어느 비용이 드는지를 뜻합니다.', 'The “Invocation” column on the overview tells you how a skill can run and whether it costs tokens on every request. The dot color shows which cost applies.', '概览中的“调用方式”列说明技能能通过哪条路径运行，以及是否在每次请求中消耗 token。圆点颜色表示产生哪种开销。'],
+  'g.modes.h1': ['호출 방식', 'Mode', '调用方式'],
+  'g.modes.h2': ['목록에 설명이 들어감', 'Description listed', '描述在列表中'],
+  'g.modes.h3': ['모델이 스스로 부름', 'Model calls it itself', '模型自行调用'],
+  'g.modes.h4': ['이름으로 직접 실행', 'You can call it by name', '可按名称直接运行'],
+  'g.modes.h5': ['요청마다 드는 토큰', 'Tokens per request', '每次请求的 token'],
+  'g.modes.h6': ['이렇게 됩니다', 'How you get it', '如何设置'],
+  'g.modes.some': ['있음', 'Yes', '有'],
+  'g.modes.on': ['기본값', 'Default', '默认'],
+  'g.modes.manual': ['<code>policy.json</code>의 <code>manualSkills</code>, 또는 SKILL.md의 <code>disable-model-invocation: true</code>', '<code>manualSkills</code> in <code>policy.json</code>, or <code>disable-model-invocation: true</code> in SKILL.md', '<code>policy.json</code> 的 <code>manualSkills</code>，或 SKILL.md 中的 <code>disable-model-invocation: true</code>'],
+  'g.modes.off': ['<code>skills off &lt;이름&gt;</code>, 또는 <code>offSkills</code>', '<code>skills off &lt;name&gt;</code>, or <code>offSkills</code>', '<code>skills off &lt;名称&gt;</code>，或 <code>offSkills</code>'],
+  'g.modes.pluginOff': ['<code>skills off plugin:&lt;이름&gt;</code>. 플러그인 스킬은 하나씩 끌 수 없습니다', '<code>skills off plugin:&lt;name&gt;</code>. Plugin skills cannot be turned off one by one', '<code>skills off plugin:&lt;名称&gt;</code>。插件技能无法逐个关闭'],
+  'g.modes.shadowed': ['같은 이름의 전역 스킬이 대신 쓰입니다 (아래 그림)', 'A global skill with the same name is used instead (see below)', '改用同名的全局技能（见下图）'],
+  'g.modes.cap': ['현황판에는 "미설치"도 나옵니다. 대화 기록에는 호출이 남아 있지만 지금은 폴더가 없는 스킬로, 내장 스킬이거나 쓴 뒤에 지운 스킬입니다. 이 표는 Claude Code 기준입니다. Codex는 목록에 있는 스킬을 모두 자동으로 보고, <code>$이름</code>으로 직접 부를 수 있습니다.', 'The overview also shows “Not installed”: skills with calls in the transcripts but no folder now — built in, or deleted after use. This table describes Claude Code. Codex treats every listed skill as auto, and you can call one directly with <code>$name</code>.', '概览中还会出现“未安装”：对话记录里有调用、但现在没有文件夹的技能，可能是内置或用后删除的。此表以 Claude Code 为准。Codex 将列表中的技能都视为自动，也可以用 <code>$名称</code> 直接调用。'],
+
+  // guide: homes
+  'g.homes.p': ['스킬은 세 곳에 있을 수 있습니다. 현황판의 "출처" 열 아래 작은 글씨가 이 설치 위치입니다. 윗줄의 출처는 스킬을 처음 만든 곳(예: gstack, mattpocock/skills)입니다. 아래 그림은 Claude Code 기준이고, 다른 에이전트의 폴더는 <a href="#/guide/agents">코딩 에이전트별 수집 방법</a>에 정리했습니다.', 'Skills can live in three places. The small text under “Source” on the overview is this location; the line above it is where the skill was made (for example gstack, mattpocock/skills). The picture below is for Claude Code; folders for other agents are listed in <a href="#/guide/agents">How each coding agent is collected</a>.', '技能可能位于三个位置。概览“来源”列下方的小字就是安装位置，上方一行是技能最初的出处（如 gstack、mattpocock/skills）。下图以 Claude Code 为准，其他智能体的文件夹见 <a href="#/guide/agents">各编码智能体的收集方式</a>。'],
+  'g.homes.pc': ['이 PC', 'This PC', '本机'],
+  'g.homes.user': ['모든 프로젝트에서 보입니다. gstack, npx skills, 스킬 세트 기본 설치가 여기로 옵니다.', 'Visible in every project. gstack, npx skills, and skill sets install here by default.', '在所有项目中可见。gstack、npx skills 和技能集默认安装到这里。'],
+  'g.homes.projectPath': ['<프로젝트>/.claude/skills/', '<project>/.claude/skills/', '<项目>/.claude/skills/'],
+  'g.homes.project': ['그 프로젝트에서만 보이고, 저장소에 커밋되어 팀과 공유됩니다.', 'Visible only in that project, and committed to the repository for the team.', '只在该项目中可见，并提交到仓库与团队共享。'],
+  'g.homes.projectEg': ['<s>review/</s> 가려짐 · plan-board/', '<s>review/</s> shadowed · plan-board/', '<s>review/</s> 被遮蔽 · plan-board/'],
+  'g.homes.pluginName': ['플러그인:스킬', 'plugin:skill', '插件:技能'],
+  'g.homes.plugin': ['플러그인을 켜면 스킬이 한꺼번에 보입니다. 스킬 하나씩 끄거나 명시 전용으로 바꿀 수 없습니다.', 'Turning a plugin on shows all its skills at once. You cannot turn them off or make them manual one by one.', '启用插件后其技能会一起出现，无法逐个关闭或改为手动。'],
+  'g.homes.rule': ['같은 이름이면', 'Same name?', '同名时'],
+  'g.homes.ruleText': ['전역 스킬이 이기고 프로젝트 스킬은 "가려짐"이 됩니다. 위 예에서 프로젝트의 <code>review</code>는 쓰이지 않습니다. 플러그인 스킬은 이름 앞에 플러그인 이름이 붙어서 겹치지 않습니다.', 'The global skill wins and the project skill becomes “Shadowed”: in the example, the project’s <code>review</code> is never used. Plugin skills are prefixed with the plugin name, so they never clash.', '全局技能优先，项目技能变为“被遮蔽”：上例中项目的 <code>review</code> 不会被使用。插件技能名称前带有插件名，不会冲突。'],
+
+  // guide: data
+  'g.data.p': ['"다시 수집"을 누르면 수집기가 세 곳을 읽고 결과를 <code>stats.json</code>에 쌓습니다. 모든 계산은 이 PC 안에서 하고, "토큰 정확히 세기"를 누를 때만 Claude Code 스킬 글을 Anthropic API로 보냅니다.', 'When you press “Collect again”, the collector reads three kinds of sources and adds the results to <code>stats.json</code>. Everything is computed on this PC; only “Count tokens exactly” sends Claude Code skill text to the Anthropic API.', '点击“重新收集”后，收集器会读取三类来源并把结果累积到 <code>stats.json</code>。所有计算都在本机完成，只有点击“精确计算 token”时才会把 Claude Code 技能文本发送到 Anthropic API。'],
+  'd5.title': ['에이전트별 대화 기록, SKILL.md 파일, 설정과 설치 기록을 수집기가 읽어 stats.json에 쌓고 현황판이 보여 준다. 토큰 정확히 세기를 누를 때만 count_tokens API를 쓴다.', 'The collector reads each agent’s transcripts, SKILL.md files, and settings and install records, stores them in stats.json, and the overview shows them. The count_tokens API is used only when counting exactly.', '收集器读取各智能体的对话记录、SKILL.md 文件以及设置和安装记录，存入 stats.json 并在概览中显示。只有精确计算时才使用 count_tokens API。'],
+  'd5.logs': ['대화 기록', 'Transcripts', '对话记录'],
+  'd5.logs.sub': ['Claude Code · Codex · Gemini · Copilot', 'Claude Code · Codex · Gemini · Copilot', 'Claude Code · Codex · Gemini · Copilot'],
+  'd5.skill': ['SKILL.md 파일', 'SKILL.md files', 'SKILL.md 文件'],
+  'd5.skill.sub': ['전역 · 프로젝트 · 플러그인 폴더', 'global, project, plugin folders', '全局 · 项目 · 插件文件夹'],
+  'd5.settings': ['설정과 설치 기록', 'Settings & install records', '设置与安装记录'],
+  'd5.collector': ['수집기', 'Collector', '收集器'],
+  'd5.store.sub': ['호출 기록을 쌓아 둠', 'keeps the call history', '保存调用记录'],
+  'd5.api.sub': ['"토큰 정확히 세기" 때만', 'only when counting exactly', '仅在精确计算时'],
+  'd5.warn': ['에이전트가 오래된 대화 기록을 지워도', 'Agents delete old transcripts, but', '即使智能体删除了旧的对话记录'],
+  'd5.warn.sub': ['한 번 수집한 호출은 stats.json에 남습니다', 'collected calls stay in stats.json', '已收集的调用仍保留在 stats.json 中'],
+  'g.data.s1': ['대화 기록에서', 'From transcripts', '来自对话记录'],
+  'g.data.s1t': ['에이전트별 호출 수, 누가 불렀는지(모델 / 사용자), 언제 어느 프로젝트에서, 호출 1회 실측, 요청별 토큰 사용량.', 'Calls per agent, who made them (model or you), when and in which project, the measured cost per call, and token usage per request.', '各智能体的调用次数、调用者（模型或用户）、时间和项目、单次调用实测，以及每次请求的 token 用量。'],
+  'g.data.s2': ['SKILL.md에서', 'From SKILL.md', '来自 SKILL.md'],
+  'g.data.s2t': ['이름, 하는 일, 요청마다 드는 토큰(설명), 호출할 때 드는 토큰(본문 전체).', 'Name, purpose, tokens per request (the description), and tokens when called (the whole body).', '名称、用途、每次请求的 token（描述）和调用时的 token（完整正文）。'],
+  'g.data.s3': ['설정과 설치 기록에서', 'From settings and install records', '来自设置与安装记录'],
+  'g.data.s3t': ['호출 방식(자동, 명시 전용, 꺼짐), 출처(스킬 세트, npx skills, 플러그인 마켓플레이스, git 원격 주소).', 'Invocation mode (auto, manual only, off) and source (skill set, npx skills, plugin marketplace, git remote).', '调用方式（自动、仅手动、关闭）和来源（技能集、npx skills、插件市场、git 远程地址）。'],
+  'g.data.p2': ['토큰 수는 기본적으로 추정입니다. 영문 4글자를 1토큰, 한글·한자 1글자를 1토큰으로 셉니다. API 키를 설정하고 "토큰 정확히 세기"를 누르면 Claude Code 스킬은 API로 잰 값으로 바뀌고, 숫자 옆에 <code>*</code>가 붙습니다. 키를 두는 곳은 <a href="#/guide/exact">토큰 정확히 세기</a>에 있습니다.', 'Token counts are estimates by default: 4 Latin characters count as 1 token, and 1 Hangul or CJK character as 1 token. With an API key set, “Count tokens exactly” replaces Claude Code skill counts with measured values, marked with <code>*</code>. Where to put the key is in <a href="#/guide/exact">Counting tokens exactly</a>.', 'token 数默认是估算：4 个拉丁字符算 1 个 token，1 个韩文或中日文字符算 1 个 token。设置 API 密钥后点击“精确计算 token”，Claude Code 技能的数值会换成 API 实测值，并在数字旁标上 <code>*</code>。密钥放在哪里见 <a href="#/guide/exact">精确计算 token</a>。'],
+
+  // guide: per-agent collection
+  'g.agents.p': ['수집기는 이 PC에서 찾은 에이전트의 대화 기록을 모두 읽습니다. 따로 켤 것은 없고, 에이전트를 한 번이라도 쓰면 다음 수집부터 현황판에 나옵니다. 기록 형식이 에이전트마다 달라서 무엇을 "호출"로 세는지와 토큰을 어디서 읽는지가 조금씩 다릅니다.', 'The collector reads the transcripts of every agent it finds on this PC. There is nothing to switch on: use an agent once and it appears on the next collection. Each agent keeps a different log format, so what counts as a call and where tokens are read from differ slightly.', '收集器会读取在本机找到的所有智能体的对话记录，无需额外开启：只要用过某个智能体，下次收集时就会出现在概览中。各智能体的记录格式不同，因此“调用”的计数方式和 token 的读取位置略有差异。'],
+  'g.ag.logs': ['대화 기록', 'Transcripts', '对话记录'],
+  'g.ag.calls': ['호출로 세는 것', 'Counted as a call', '计为调用'],
+  'g.ag.usage': ['토큰 사용량', 'Token usage', 'token 用量'],
+  'g.ag.listing': ['요청마다 드는 토큰', 'Tokens per request', '每次请求的 token'],
+  'g.ag.dirs': ['스킬 폴더', 'Skill folders', '技能文件夹'],
+  'g.ag.note': ['주의', 'Caveats', '注意'],
+  'g.ag.status': ['이 PC: 기록 {n}개 · 스킬 {s}개', 'This PC: {n} transcripts · {s} skills', '本机：{n} 个记录 · {s} 个技能'],
+  'g.ag.missing': ['이 PC에서 찾지 못함', 'Not found on this PC', '本机未发现'],
+  'g.ag.claude.logs': ['<code>~/.claude/projects/**/*.jsonl</code> (서브에이전트 포함)', '<code>~/.claude/projects/**/*.jsonl</code> (including subagents)', '<code>~/.claude/projects/**/*.jsonl</code>（包括子智能体）'],
+  'g.ag.claude.calls': ['모델: Skill 도구 호출. 사용자: <code>/이름</code> 입력 뒤 SKILL.md 본문이 들어간 기록.', 'Model: a Skill tool call. You: the SKILL.md body injected after you type <code>/name</code>.', '模型：Skill 工具调用。用户：输入 <code>/名称</code> 后注入 SKILL.md 正文的记录。'],
+  'g.ag.claude.usage': ['응답마다 기록된 <code>usage</code>: 입력 + 캐시 생성 + 캐시 읽기, 그리고 출력.', 'The <code>usage</code> on each response: input + cache writes + cache reads, and output.', '每次响应记录的 <code>usage</code>：输入 + 缓存写入 + 缓存读取，以及输出。'],
+  'g.ag.claude.listing': ['설정(<code>skillOverrides</code>)과 SKILL.md로 계산합니다. 자동 스킬마다 이름 + 설명(1,536자에서 자름).', 'Worked out from settings (<code>skillOverrides</code>) and SKILL.md: name + description of each auto skill, cut at 1,536 characters.', '根据设置（<code>skillOverrides</code>）和 SKILL.md 计算：每个自动技能的名称 + 描述（截断到 1,536 个字符）。'],
+  'g.ag.claude.dirs': ['<code>~/.claude/skills</code>, <code>&lt;프로젝트&gt;/.claude/skills</code>, 플러그인', '<code>~/.claude/skills</code>, <code>&lt;project&gt;/.claude/skills</code>, plugins', '<code>~/.claude/skills</code>、<code>&lt;项目&gt;/.claude/skills</code>、插件'],
+  'g.ag.claude.note': ['<code>cleanupPeriodDays</code>(기본 30일)가 지난 기록은 지워집니다. 그 전에 한 번씩 수집하세요.', 'Transcripts older than <code>cleanupPeriodDays</code> (30 days by default) are deleted, so collect before then.', '超过 <code>cleanupPeriodDays</code>（默认 30 天）的记录会被删除，请在此之前收集。'],
+  'g.ag.codex.logs': ['<code>$CODEX_HOME/sessions/**/rollout-*.jsonl</code>과 <code>archived_sessions</code>. <code>CODEX_HOME</code> 기본값은 <code>~/.codex</code>.', '<code>$CODEX_HOME/sessions/**/rollout-*.jsonl</code> and <code>archived_sessions</code>. <code>CODEX_HOME</code> defaults to <code>~/.codex</code>.', '<code>$CODEX_HOME/sessions/**/rollout-*.jsonl</code> 和 <code>archived_sessions</code>。<code>CODEX_HOME</code> 默认为 <code>~/.codex</code>。'],
+  'g.ag.codex.calls': ['모델: 셸 명령으로 SKILL.md를 읽은 기록(<code>parsed_cmd</code>의 read)이나 <code>&lt;skill&gt;</code> 주입. 사용자: 메시지 안의 <code>$이름</code>이나 앱에서 고른 <code>[$이름](…)</code>. 한 턴에서 같은 스킬은 한 번만 셉니다.', 'Model: a shell read of a SKILL.md (a read in <code>parsed_cmd</code>) or an injected <code>&lt;skill&gt;</code>. You: <code>$name</code> in your message, or <code>[$name](…)</code> picked in the app. A skill counts once per turn.', '模型：通过 shell 命令读取 SKILL.md（<code>parsed_cmd</code> 中的 read）或注入的 <code>&lt;skill&gt;</code>。用户：消息中的 <code>$名称</code>，或在应用中选择的 <code>[$名称](…)</code>。同一轮中同一技能只计一次。'],
+  'g.ag.codex.usage': ['<code>token_count</code> 이벤트의 <code>last_token_usage</code> (입력에 캐시 포함).', '<code>last_token_usage</code> from <code>token_count</code> events (input includes cache).', '<code>token_count</code> 事件中的 <code>last_token_usage</code>（输入包含缓存）。'],
+  'g.ag.codex.listing': ['마지막 Codex 세션이 실제로 보낸 <code>&lt;skills_instructions&gt;</code> 목록을 줄마다 셉니다. Codex는 설명을 약 100자로 줄여 보냅니다.', 'Counted line by line from the <code>&lt;skills_instructions&gt;</code> list the last Codex session actually sent. Codex shortens each description to about 100 characters.', '逐行统计上次 Codex 会话实际发送的 <code>&lt;skills_instructions&gt;</code> 列表。Codex 会把描述缩短到约 100 个字符。'],
+  'g.ag.codex.dirs': ['<code>~/.codex/skills</code>(하위 폴더까지), <code>~/.agents/skills</code>, <code>~/.codex/skills/.system</code>(기본 제공), 플러그인, <code>&lt;프로젝트&gt;/.agents/skills</code>', '<code>~/.codex/skills</code> (including subfolders), <code>~/.agents/skills</code>, <code>~/.codex/skills/.system</code> (built-in), plugins, <code>&lt;project&gt;/.agents/skills</code>', '<code>~/.codex/skills</code>（含子文件夹）、<code>~/.agents/skills</code>、<code>~/.codex/skills/.system</code>（内置）、插件、<code>&lt;项目&gt;/.agents/skills</code>'],
+  'g.ag.codex.note': ['포크된 서브에이전트는 부모 대화를 다시 기록하므로 같은 턴은 한 번만 셉니다. 자동 검토(guardian) 세션은 검토하는 대화를 인용하므로 호출로 세지 않고 토큰만 셉니다. 같은 스킬이 두 경로에 있으면 목록에 두 번 실려 "중복 등록"으로 표시됩니다.', 'Forked subagents re-record the parent conversation, so a turn counts once. Auto-review (guardian) sessions quote the conversation they review, so they add tokens but no calls. A skill found in two folders is listed twice and flagged “Listed twice”.', '派生的子智能体会重新记录父对话，因此同一轮只计一次。自动审查（guardian）会话会引用被审查的对话，因此只计 token，不计调用。同一技能位于两个路径时会被列出两次，并标为“重复登记”。'],
+  'g.ag.gemini.logs': ['<code>~/.gemini/tmp/&lt;프로젝트&gt;/chats/session-*.json</code>. 프로젝트 경로는 옆의 <code>.project_root</code>에서 읽습니다.', '<code>~/.gemini/tmp/&lt;project&gt;/chats/session-*.json</code>. The project path comes from the <code>.project_root</code> file next to it.', '<code>~/.gemini/tmp/&lt;项目&gt;/chats/session-*.json</code>。项目路径读取自旁边的 <code>.project_root</code>。'],
+  'g.ag.gemini.calls': ['모델이 <code>activate_skill</code> 도구를 부르거나 <code>read_file</code>로 SKILL.md를 읽은 기록.', 'The model calling the <code>activate_skill</code> tool, or reading a SKILL.md with <code>read_file</code>.', '模型调用 <code>activate_skill</code> 工具，或用 <code>read_file</code> 读取 SKILL.md 的记录。'],
+  'g.ag.gemini.usage': ['응답마다 기록된 <code>tokens</code> (입력, 출력 + 생각 토큰).', 'The <code>tokens</code> on each response (input; output plus thinking).', '每次响应记录的 <code>tokens</code>（输入；输出加思考 token）。'],
+  'g.ag.gemini.listing': ['폴더의 SKILL.md로 추정합니다(이름 + 설명). <code>settings.json</code>의 <code>skills.disabled</code>에 있는 스킬은 꺼짐으로 봅니다.', 'Estimated from SKILL.md files (name + description). Skills in <code>skills.disabled</code> of <code>settings.json</code> count as off.', '根据 SKILL.md 估算（名称 + 描述）。<code>settings.json</code> 中 <code>skills.disabled</code> 里的技能视为已关闭。'],
+  'g.ag.gemini.dirs': ['<code>~/.gemini/skills</code>, <code>&lt;프로젝트&gt;/.gemini/skills</code>', '<code>~/.gemini/skills</code>, <code>&lt;project&gt;/.gemini/skills</code>', '<code>~/.gemini/skills</code>、<code>&lt;项目&gt;/.gemini/skills</code>'],
+  'g.ag.gemini.note': ['<code>general.sessionRetention</code>이 켜져 있으면 오래된 세션이 지워집니다. 사용자가 이름으로 직접 부르는 호출은 기록에 따로 남지 않아 모델 호출로만 셉니다.', 'With <code>general.sessionRetention</code> on, old sessions are deleted. Calling a skill yourself leaves no separate record, so every call counts as a model call.', '启用 <code>general.sessionRetention</code> 时旧会话会被删除。用户直接调用技能不会留下单独记录，因此都计为模型调用。'],
+  'g.ag.copilot.logs': ['<code>~/.copilot/session-state/**/*.jsonl</code>', '<code>~/.copilot/session-state/**/*.jsonl</code>', '<code>~/.copilot/session-state/**/*.jsonl</code>'],
+  'g.ag.copilot.calls': ['기록 형식이 문서로 공개돼 있지 않아 모양으로 찾습니다: 이름이 <code>skill</code>인 도구 호출, 또는 SKILL.md를 읽은 도구 호출.', 'The log format is not documented, so calls are found by shape: a tool call named <code>skill</code>, or a tool call that reads a SKILL.md.', '记录格式没有公开文档，因此按结构识别：名为 <code>skill</code> 的工具调用，或读取 SKILL.md 的工具调用。'],
+  'g.ag.copilot.usage': ['<code>usage</code> 아래나 usage 이벤트에 있는 입력·출력 토큰 수.', 'Input and output token counts under a <code>usage</code> key or on a usage event.', '<code>usage</code> 字段下或 usage 事件中的输入、输出 token 数。'],
+  'g.ag.copilot.listing': ['폴더의 SKILL.md로 추정합니다(이름 + 설명).', 'Estimated from SKILL.md files (name + description).', '根据 SKILL.md 估算（名称 + 描述）。'],
+  'g.ag.copilot.dirs': ['<code>~/.copilot/skills</code>, <code>&lt;프로젝트&gt;/.github/skills</code>', '<code>~/.copilot/skills</code>, <code>&lt;project&gt;/.github/skills</code>', '<code>~/.copilot/skills</code>、<code>&lt;项目&gt;/.github/skills</code>'],
+  'g.ag.copilot.note': ['실험적입니다. 버전에 따라 형식이 바뀌면 호출이나 토큰이 빠질 수 있습니다.', 'Experimental. If a new version changes the format, calls or tokens may be missed.', '实验性功能。版本更新导致格式变化时，可能漏计调用或 token。'],
+  'g.agents.p2': ['한 에이전트가 다른 에이전트의 스킬 폴더를 함께 읽는 설정은 반영하지 않습니다. Cursor, Antigravity처럼 기록을 데이터베이스나 바이너리 파일로 두는 도구는 수집하지 않습니다. 수집한 내용은 모두 <code>~/.claude/skill-policy/stats.json</code> 하나에 쌓입니다.', 'Setups where one agent also reads another agent’s skill folders are not reflected. Tools that keep their logs in a database or binary files, such as Cursor or Antigravity, are not collected. Everything collected goes into one file, <code>~/.claude/skill-policy/stats.json</code>.', '不会反映一个智能体同时读取其他智能体技能文件夹的配置。Cursor、Antigravity 等把记录存在数据库或二进制文件中的工具不会被收集。收集的内容全部保存在 <code>~/.claude/skill-policy/stats.json</code> 这一个文件中。'],
+
+  // guide: exact token counts
+  'g.exact.h': ['토큰 정확히 세기: API 키는 어디에 두나', 'Counting tokens exactly: where the API key goes', '精确计算 token：API 密钥放在哪里'],
+  'g.exact.p': ['"토큰 정확히 세기"는 Claude Code 스킬의 설명과 본문을 Anthropic <code>count_tokens</code> API로 보내 실제 토큰 수를 받아 옵니다. 요금은 들지 않지만 API 키가 필요합니다. Codex·Gemini·Copilot 스킬은 토크나이저가 달라서 계속 추정치로 둡니다.', '“Count tokens exactly” sends Claude Code skill descriptions and bodies to the Anthropic <code>count_tokens</code> API and gets back real token counts. It is free, but it needs an API key. Codex, Gemini, and Copilot skills keep their estimates, because those agents use different tokenizers.', '“精确计算 token”会把 Claude Code 技能的描述和正文发送到 Anthropic <code>count_tokens</code> API 并取回实际 token 数。该接口免费，但需要 API 密钥。Codex、Gemini、Copilot 技能使用不同的分词器，因此仍保留估算值。'],
+  'g.exact.f1': ['터미널', 'Terminal', '终端'],
+  'g.exact.f1s': ['환경 변수를 여기에 설정합니다', 'set the variable here', '在这里设置环境变量'],
+  'g.exact.f2': ['대시보드 서버', 'Dashboard server', '仪表板服务器'],
+  'g.exact.f2s': ['그 터미널에서 실행하면 키를 물려받습니다', 'inherits the key when started from that terminal', '从该终端启动时继承密钥'],
+  'g.exact.f3s': ['서버가 키로 호출합니다', 'the server calls it with the key', '服务器使用密钥调用'],
+  'g.exact.no1': ['브라우저가 아닙니다', 'Not the browser', '不是浏览器'],
+  'g.exact.no1t': ['이 페이지는 키를 받거나 저장하지 않습니다. 키는 서버 프로세스에만 있습니다.', 'This page never receives or stores the key; only the server process has it.', '本页面不会接收或保存密钥，密钥只存在于服务器进程中。'],
+  'g.exact.no2': ['Claude Code 설정이 아닙니다', 'Not Claude Code settings', '不是 Claude Code 设置'],
+  'g.exact.no2t': ['<code>~/.claude/settings.json</code>의 <code>env</code>는 Claude Code 안에서 실행한 명령에만 전달되고, 따로 연 터미널의 대시보드에는 가지 않습니다.', 'The <code>env</code> in <code>~/.claude/settings.json</code> only reaches commands run inside Claude Code, not a dashboard started from your own terminal.', '<code>~/.claude/settings.json</code> 中的 <code>env</code> 只会传给在 Claude Code 内运行的命令，不会传给你在其他终端启动的仪表板。'],
+  'g.exact.cap': ['서버는 켜질 때 환경 변수를 한 번 읽습니다. 키를 설정했으면 서버를 껐다 켜세요(Ctrl+C 뒤 다시 실행). 지금 상태: <span class="live" data-live="exact">…</span>', 'The server reads environment variables once, when it starts. After setting the key, restart it (Ctrl+C, then run it again). Right now: <span class="live" data-live="exact">…</span>', '服务器只在启动时读取一次环境变量。设置密钥后请重启服务器（Ctrl+C 后重新运行）。当前状态：<span class="live" data-live="exact">…</span>'],
+  'g.exact.live.on': ['{v}를 읽었습니다', 'reading {v}', '已读取 {v}'],
+  'g.exact.live.off': ['키가 설정되지 않았습니다', 'no key set', '未设置密钥'],
+  'g.exact.varsH': ['어떤 변수를 쓰나', 'Which variable to use', '使用哪个变量'],
+  'g.exact.varsP': ['<code>SKILL_STATS_API_KEY</code>를 권합니다. 이 대시보드만 읽는 변수입니다. <code>ANTHROPIC_API_KEY</code>도 되지만, 이 변수가 설정된 터미널에서 Claude Code를 실행하면 Claude Code가 구독 대신 그 API 키를 쓰겠냐고 묻거나 API 요금으로 쓰게 됩니다. 계속 설정해 둘 거라면 <code>SKILL_STATS_API_KEY</code>가 안전합니다.', 'Use <code>SKILL_STATS_API_KEY</code>: only this dashboard reads it. <code>ANTHROPIC_API_KEY</code> works too, but Claude Code started from a terminal with that variable will offer to use the API key instead of your subscription, or bill the API. If you keep the key set permanently, <code>SKILL_STATS_API_KEY</code> is the safe choice.', '推荐使用 <code>SKILL_STATS_API_KEY</code>，只有本仪表板会读取它。<code>ANTHROPIC_API_KEY</code> 也可以，但在设置了该变量的终端中启动 Claude Code 时，Claude Code 会询问是否改用该 API 密钥代替订阅，或按 API 计费。如果要长期保留，<code>SKILL_STATS_API_KEY</code> 更安全。'],
+  'g.exact.th1': ['변수', 'Variable', '变量'],
+  'g.exact.th2': ['뜻', 'What it does', '作用'],
+  'g.exact.th3': ['기본값', 'Default', '默认值'],
+  'g.exact.v1': ['count_tokens에 쓰는 키. 이 변수를 먼저 봅니다.', 'Key for count_tokens. Checked first.', 'count_tokens 使用的密钥，优先读取。'],
+  'g.exact.v2': ['위 변수가 없을 때 씁니다.', 'Used when the one above is not set.', '上一个变量未设置时使用。'],
+  'g.exact.v3': ['토큰을 셀 때 쓰는 모델', 'Model used for counting', '计算 token 时使用的模型'],
+  'g.exact.v4': ['Codex 기록을 읽는 위치', 'Where Codex logs are read from', '读取 Codex 记录的位置'],
+  'g.exact.whereH': ['설정하는 곳', 'Where to set it', '在哪里设置'],
+  'g.exact.osAria': ['운영체제', 'Operating system', '操作系统'],
+  'g.exact.once': ['이번 터미널에서만', 'This terminal only', '仅当前终端'],
+  'g.exact.onceP': ['창을 닫으면 사라집니다. 키가 파일에 남지 않아 가장 안전합니다.', 'It is gone when you close the window. Nothing is written to disk, so this is the safest option.', '关闭窗口后即失效。密钥不会写入文件，最安全。'],
+  'g.exact.keep': ['계속 쓰기', 'Keep it set', '长期保留'],
+  'g.exact.winKeepP': ['사용자 환경 변수로 저장합니다. <code>setx</code>는 이미 열린 터미널에는 반영되지 않으니 새 터미널을 여세요(VS Code 터미널이라면 VS Code를 다시 시작). 화면으로 하려면 시작 메뉴에서 "환경 변수"를 검색해 "계정의 환경 변수 편집" → 사용자 변수 → 새로 만들기.', 'Saves it as a user environment variable. <code>setx</code> does not affect terminals that are already open, so open a new one (for the VS Code terminal, restart VS Code). To do it by hand: search “environment variables” in the Start menu → “Edit environment variables for your account” → User variables → New.', '保存为用户环境变量。<code>setx</code> 不会影响已打开的终端，请打开新终端（VS Code 终端需要重启 VS Code）。也可以在开始菜单搜索“环境变量”→“编辑账户的环境变量”→ 用户变量 → 新建。'],
+  'g.exact.unixKeepP': ['셸 설정 파일에 넣습니다. zsh(macOS 기본)는 <code>~/.zshrc</code>, bash는 <code>~/.bashrc</code>입니다. 파일에 키가 평문으로 남으니 권한을 확인하세요.', 'Add it to your shell profile: <code>~/.zshrc</code> for zsh (the macOS default), <code>~/.bashrc</code> for bash. The key sits there in plain text, so check the file permissions.', '写入 shell 配置文件：zsh（macOS 默认）用 <code>~/.zshrc</code>，bash 用 <code>~/.bashrc</code>。密钥会以明文保存在文件中，请注意文件权限。'],
+  'g.exact.winOnce': ['$env:SKILL_STATS_API_KEY = "sk-ant-..."\nnode setup.mjs dashboard', '$env:SKILL_STATS_API_KEY = "sk-ant-..."\nnode setup.mjs dashboard', '$env:SKILL_STATS_API_KEY = "sk-ant-..."\nnode setup.mjs dashboard'],
+  'g.exact.winKeep': ['setx SKILL_STATS_API_KEY "sk-ant-..."\n<span class="c"># 새 터미널을 연 뒤</span>\nnode setup.mjs dashboard', 'setx SKILL_STATS_API_KEY "sk-ant-..."\n<span class="c"># then, in a new terminal</span>\nnode setup.mjs dashboard', 'setx SKILL_STATS_API_KEY "sk-ant-..."\n<span class="c"># 然后在新终端中</span>\nnode setup.mjs dashboard'],
+  'g.exact.unixOnce': ['export SKILL_STATS_API_KEY="sk-ant-..."\nnode setup.mjs dashboard\n\n<span class="c"># 한 줄로: 이 명령에만 적용</span>\nSKILL_STATS_API_KEY="sk-ant-..." node setup.mjs dashboard', 'export SKILL_STATS_API_KEY="sk-ant-..."\nnode setup.mjs dashboard\n\n<span class="c"># or, for this one command only</span>\nSKILL_STATS_API_KEY="sk-ant-..." node setup.mjs dashboard', 'export SKILL_STATS_API_KEY="sk-ant-..."\nnode setup.mjs dashboard\n\n<span class="c"># 或者只对这一条命令生效</span>\nSKILL_STATS_API_KEY="sk-ant-..." node setup.mjs dashboard'],
+  'g.exact.unixKeep': ['echo \'export SKILL_STATS_API_KEY="sk-ant-..."\' &gt;&gt; ~/.zshrc   <span class="c"># bash는 ~/.bashrc</span>\nsource ~/.zshrc\nnode setup.mjs dashboard', 'echo \'export SKILL_STATS_API_KEY="sk-ant-..."\' &gt;&gt; ~/.zshrc   <span class="c"># bash: ~/.bashrc</span>\nsource ~/.zshrc\nnode setup.mjs dashboard', 'echo \'export SKILL_STATS_API_KEY="sk-ant-..."\' &gt;&gt; ~/.zshrc   <span class="c"># bash 用 ~/.bashrc</span>\nsource ~/.zshrc\nnode setup.mjs dashboard'],
+  'g.exact.checkH': ['확인', 'Check it worked', '确认'],
+  'g.exact.c1': ['위쪽 "토큰 정확히 세기" 버튼이 켜지고, 마우스를 올리면 어느 변수를 읽었는지 보입니다. 브라우저 없이 확인하려면 <code>node setup.mjs stats --exact</code>.', 'The “Count tokens exactly” button at the top becomes active, and hovering it shows which variable was read. Without a browser: <code>node setup.mjs stats --exact</code>.', '顶部的“精确计算 token”按钮变为可用，悬停可看到读取了哪个变量。不用浏览器时：<code>node setup.mjs stats --exact</code>。'],
+  'g.exact.c2': ['누르면 Claude Code 스킬 숫자 옆에 <code>*</code>가 붙습니다. 결과는 내용 해시로 캐시해서 바뀐 스킬만 다시 보냅니다.', 'After you press it, Claude Code skill numbers get a <code>*</code>. Results are cached by content hash, so only changed skills are sent again.', '点击后 Claude Code 技能的数字旁会出现 <code>*</code>。结果按内容哈希缓存，只重新发送有变化的技能。'],
+  'g.exact.c3': ['키는 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console → API Keys</a>에서 만듭니다. <code>count_tokens</code>는 무료지만 분당 요청 수 제한이 있습니다.', 'Create a key in <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console → API Keys</a>. <code>count_tokens</code> is free but rate-limited.', '在 <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console → API Keys</a> 创建密钥。<code>count_tokens</code> 免费，但有每分钟请求数限制。'],
+
+  // guide: terms
+  'g.terms.fixed': ['요청마다 고정 비용 (항상 드는 토큰)', 'Fixed cost per request (always-on tokens)', '每次请求的固定开销（常驻 token）'],
+  'g.terms.fixedT': ['모든 프로젝트에서 요청마다 들어가는 자동 스킬 설명의 합입니다. 에이전트마다 따로 계산하고, 프로젝트 스킬이 있는 곳에서는 그만큼 더 들어갑니다.', 'The sum of auto skill descriptions sent with every request in every project. It is counted per agent; projects with their own skills add more.', '所有项目中每次请求都会发送的自动技能描述之和。按智能体分别计算，有项目技能的地方会更多。'],
+  'g.terms.stripT': ['고정 비용을 스킬별로 쪼갠 막대입니다. 빗금 칸은 30일간 안 쓴 스킬, 빨간 밑줄은 중복 등록입니다. 프로젝트 줄은 공통분(회색) 뒤에 그 프로젝트 스킬이 붙습니다.', 'The fixed cost split by skill. Hatched cells are unused for 30 days; a red underline marks a duplicate. Project rows add their own skills after the shared part (gray).', '按技能拆分的固定开销。斜线格为 30 天未用，红色下划线为重复登记。项目行在公共部分（灰色）后加上该项目的技能。'],
+  'g.terms.body': ['호출 시 (쓸 때 드는 토큰)', 'On call (on-use tokens)', '调用时（调用时 token）'],
+  'g.terms.bodyT': ['스킬을 부를 때 들어가는 SKILL.md 본문 크기입니다. 부른 요청부터 대화가 끝날 때까지 남습니다.', 'The size of the SKILL.md body added when the skill is called. It stays from that request until the conversation ends.', '调用技能时加入的 SKILL.md 正文大小。从调用的请求开始一直保留到对话结束。'],
+  'g.terms.idleT': ['자동 스킬인데 최근 30일 동안 한 번도 불리지 않은 스킬입니다. 설명 토큰만 요청마다 나가고 있으니 /명시 전용으로 바꾸거나 끌 후보입니다.', 'Auto skills not called once in the last 30 days. They cost description tokens on every request, so they are candidates for /manual only or off.', '最近 30 天一次都没被调用的自动技能。它们每次请求都消耗描述 token，是改为仅 / 手动或关闭的候选。'],
+  'g.terms.dupT': ['같은 이름의 스킬이 목록에 두 번 이상 실린 경우입니다. 주로 Codex에서 같은 스킬이 두 폴더에 있거나, 같은 플러그인이 두 마켓플레이스에서 설치됐을 때 생깁니다.', 'A skill whose name appears in the list more than once. It mostly happens in Codex, when the same skill sits in two folders or the same plugin is installed from two marketplaces.', '同名技能在列表中出现不止一次。多见于 Codex：同一技能位于两个文件夹，或同一插件从两个市场安装。'],
+  'g.terms.measuredT': ['목록에서 행을 펼치면 보입니다. 대화 기록의 실제 사용량에서, 스킬을 부르기 직전과 직후 요청의 입력 차이(중앙값)입니다. 최대치로 읽습니다.', 'Shown when you expand a row. The difference in input between the requests right before and right after the call, from real usage in transcripts (median). Read it as an upper bound.', '展开某行即可看到。取自对话记录中的实际用量：调用前后请求的输入差（中位数）。请视为上限。'],
+  'g.terms.agent': ['에이전트', 'Agent', '智能体'],
+  'g.terms.agentT': ['그 스킬을 보는 코딩 에이전트입니다. 같은 스킬이 두 에이전트에 있으면 두 줄로 나옵니다. 위쪽 "코딩 에이전트"에서 하나만 골라 볼 수 있습니다.', 'The coding agent that sees the skill. A skill present in two agents shows up as two rows. Pick one agent at the top under “Coding agent” to see only its skills.', '能看到该技能的编码智能体。同一技能存在于两个智能体中会显示为两行。可在顶部“编码智能体”中只选一个查看。'],
+  'g.terms.origin': ['출처와 분류', 'Source and category', '来源与分类'],
+  'g.terms.originT': ['출처는 스킬을 만든 곳, 분류는 이름·설명의 키워드로 정한 용도입니다. 틀리면 <code>skill-meta.local.json</code>에서 고칩니다 (아래 참고).', 'Source is where the skill was made; category is its purpose, guessed from keywords in its name and description. Fix either in <code>skill-meta.local.json</code> (see below).', '来源是技能的出处，分类是根据名称和描述中的关键词判断的用途。有误时可在 <code>skill-meta.local.json</code> 中修改（见下文）。'],
+
+  // guide: tidy
+  'g.tidy.idleH': ['안 쓰는 자동 스킬 줄이기', 'Trim unused auto skills', '减少不用的自动技能'],
+  'g.tidy.idleP': ['현황판에서 "정리 후보만"을 켜고 요청마다 드는 토큰이 큰 순서로 봅니다. 가끔은 쓰는 스킬이면 명시 전용으로, 전혀 안 쓰면 끕니다. 설정은 새 세션부터 적용됩니다.', 'On the overview, turn on “Cleanup candidates only” and sort by tokens per request. Make the occasionally used ones manual only; turn off the ones you never use. Changes apply from the next session.', '在概览中打开“仅待清理”，按每次请求 token 从大到小查看。偶尔使用的改为仅手动，完全不用的关闭。设置从新会话开始生效。'],
+  'g.tidy.idleCode': ['<span class="c"># 끄기 (파일은 남김)</span>\nnode setup.mjs skills off &lt;스킬 이름&gt;\n<span class="c"># 명시 전용으로: ~/.claude/skill-policy/policy.json의 manualSkills에 이름을 넣고</span>\nnode ~/.claude/skill-policy/skill-policy.mjs --apply', '<span class="c"># turn off (files stay)</span>\nnode setup.mjs skills off &lt;skill name&gt;\n<span class="c"># manual only: add the name to manualSkills in ~/.claude/skill-policy/policy.json, then</span>\nnode ~/.claude/skill-policy/skill-policy.mjs --apply', '<span class="c"># 关闭（保留文件）</span>\nnode setup.mjs skills off &lt;技能名称&gt;\n<span class="c"># 改为仅手动：把名称加入 ~/.claude/skill-policy/policy.json 的 manualSkills，然后</span>\nnode ~/.claude/skill-policy/skill-policy.mjs --apply'],
+  'g.tidy.dupH': ['Codex 중복 등록 없애기', 'Remove Codex duplicates', '清除 Codex 重复登记'],
+  'g.tidy.dupP': ['"중복 등록만"을 켜고 Codex를 고른 뒤, 행을 펼쳐 경로를 봅니다. 예를 들어 gstack 스킬이 <code>~/.codex/skills/&lt;이름&gt;</code>과 <code>~/.codex/skills/gstack/&lt;이름&gt;</code>에 모두 있으면 한쪽만 남깁니다. 같은 플러그인이 두 마켓플레이스에서 설치됐다면 Codex의 플러그인 화면에서 하나를 끕니다. 다음 Codex 세션부터 목록이 줄어듭니다.', 'Turn on “Duplicates only”, choose Codex, and expand the rows to see the paths. If a gstack skill sits in both <code>~/.codex/skills/&lt;name&gt;</code> and <code>~/.codex/skills/gstack/&lt;name&gt;</code>, keep only one. If one plugin is installed from two marketplaces, turn one off in Codex’s plugin settings. The list shrinks from the next Codex session.', '打开“仅重复登记”并选择 Codex，展开行查看路径。例如 gstack 技能同时位于 <code>~/.codex/skills/&lt;名称&gt;</code> 和 <code>~/.codex/skills/gstack/&lt;名称&gt;</code> 时，只保留一处。同一插件从两个市场安装时，在 Codex 的插件界面关闭其中一个。从下一次 Codex 会话起列表会变短。'],
+  'g.tidy.pluginH': ['플러그인 통째로 끄기', 'Turn off a whole plugin', '整体关闭插件'],
+  'g.tidy.pluginP': ['플러그인 스킬은 하나씩 끌 수 없습니다. 출처별 보기에서 플러그인 묶음의 합계를 보고 판단합니다.', 'Plugin skills cannot be turned off one at a time. Use the “By source” view to see the plugin’s total, then decide.', '插件技能无法逐个关闭。在“按来源”视图中查看插件合计后再决定。'],
+  'g.tidy.pluginCode': ['node setup.mjs skills off plugin:&lt;플러그인 이름&gt;', 'node setup.mjs skills off plugin:&lt;plugin name&gt;', 'node setup.mjs skills off plugin:&lt;插件名称&gt;'],
+  'g.tidy.metaH': ['출처나 분류 고치기', 'Fix a source or category', '修改来源或分类'],
+  'g.tidy.metaP': ['<code>~/.claude/skill-policy/skill-meta.local.json</code>을 만들어 적습니다. 분류 값은 <code>plan</code>, <code>build</code>, <code>debug</code>, <code>review</code>, <code>test</code>, <code>ship</code>, <code>design</code>, <code>docs</code>, <code>data</code>, <code>research</code>, <code>work</code>, <code>agent</code>, <code>other</code> 중 하나입니다.', 'Create <code>~/.claude/skill-policy/skill-meta.local.json</code>. Category values are one of <code>plan</code>, <code>build</code>, <code>debug</code>, <code>review</code>, <code>test</code>, <code>ship</code>, <code>design</code>, <code>docs</code>, <code>data</code>, <code>research</code>, <code>work</code>, <code>agent</code>, <code>other</code>.', '创建 <code>~/.claude/skill-policy/skill-meta.local.json</code>。分类值为 <code>plan</code>、<code>build</code>、<code>debug</code>、<code>review</code>、<code>test</code>、<code>ship</code>、<code>design</code>、<code>docs</code>、<code>data</code>、<code>research</code>、<code>work</code>、<code>agent</code>、<code>other</code> 之一。'],
+  'g.tidy.keepH': ['기록 오래 보관하기', 'Keep history longer', '长期保存记录'],
+  'g.tidy.keepP': ['Claude Code는 30일이 지난 대화 기록을 지우고, Gemini CLI도 설정에 따라 지웁니다. 그 전에 한 번씩 수집하면 호출 기록이 <code>stats.json</code>에 계속 쌓입니다.', 'Claude Code deletes transcripts after 30 days, and Gemini CLI may too, depending on its settings. Collect before then and the call history keeps growing in <code>stats.json</code>.', 'Claude Code 会删除 30 天前的对话记录，Gemini CLI 也可能按设置删除。在此之前收集一次，调用记录就会持续累积在 <code>stats.json</code> 中。'],
+  'g.tidy.keepCode': ['node setup.mjs dashboard   <span class="c"># 현황판 (http://localhost:4178)</span>\nnode setup.mjs stats       <span class="c"># 브라우저 없이 수집만</span>', 'node setup.mjs dashboard   <span class="c"># overview (http://localhost:4178)</span>\nnode setup.mjs stats       <span class="c"># collect only, no browser</span>', 'node setup.mjs dashboard   <span class="c"># 概览（http://localhost:4178）</span>\nnode setup.mjs stats       <span class="c"># 只收集，不打开浏览器</span>'],
+};
+</script>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const short = (p) => (p ? p.split('/').filter(Boolean).at(-1) : '');
+const sum = (xs, f) => xs.reduce((a, x) => a + f(x), 0);
+const saved = {
+  get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* storage blocked */ } },
+};
+
+// ---------- language ----------
+const LANGS = {
+  ko: { i: 0, locale: 'ko-KR', html: 'ko' },
+  en: { i: 1, locale: 'en-US', html: 'en' },
+  zh: { i: 2, locale: 'zh-CN', html: 'zh-CN' },
+};
+function pickLang() {
+  const s = saved.get('skill-dash-lang');
+  if (LANGS[s]) return s;
+  const n = (navigator.language || '').toLowerCase();
+  return n.startsWith('ko') ? 'ko' : n.startsWith('zh') ? 'zh' : n ? 'en' : 'ko';
+}
+let lang = pickLang();
+function t(key, vars = {}) {
+  const row = T[key];
+  if (!row) return key;
+  let s = row[LANGS[lang].i] ?? row[0];
+  if (typeof s === 'function') s = s(vars);
+  return s.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
+}
+const locale = () => LANGS[lang].locale;
+const fmt = (n) => (n == null ? '–' : Number(n).toLocaleString(locale()));
+const compact = (n) => new Intl.NumberFormat(locale(), { notation: 'compact', maximumFractionDigits: 1 }).format(n ?? 0);
+const pct = (x) => new Intl.NumberFormat(locale(), { style: 'percent', maximumFractionDigits: 1 }).format(x);
+const dayDate = (d) => {
+  const [y, m, dd] = d.split('-').map(Number);
+  return new Date(y, m - 1, dd).toLocaleDateString(locale(), { month: 'short', day: 'numeric' });
+};
+const ago = (ts) => {
+  const d = Math.floor((Date.now() - Date.parse(ts)) / 86400000);
+  return d <= 0 ? t('ago.today') : d === 1 ? t('ago.yesterday') : t('ago.days', { n: d });
+};
+
+// ---------- theme ----------
+const THEMES = ['auto', 'light', 'dark'];
+let theme = saved.get('skill-dash-theme') || 'auto';
+function applyTheme(v) {
+  if (v === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', v);
+  $('theme').textContent = t('theme.label', { t: t(`theme.${v}`) });
+}
+$('theme').addEventListener('click', () => {
+  theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+  saved.set('skill-dash-theme', theme);
+  applyTheme(theme);
+});
+
+// ---------- vocabulary from data ----------
+// Mode dot colors follow the cost they cause: amber = every request, teal = only when called.
+const MODE_META = {
+  'on': { dot: 'always', group: 'auto' },
+  'name-only': { dot: 'always', group: 'auto' },
+  'user-invocable-only': { dot: 'onuse', group: 'manual' },
+  'off': { dot: 'off', group: 'off' },
+  'plugin-off': { dot: 'off', group: 'off' },
+  'shadowed': { dot: 'off', group: 'off' },
+  'not-installed': { dot: 'off', group: 'off' },
+};
+const modeOf = (s) => {
+  const m = MODE_META[s.mode] ?? { dot: 'off', group: 'off' };
+  return { ...m, label: T[`mode.${s.mode}`] ? t(`mode.${s.mode}`) : s.mode, text: T[`mode.${s.mode}.text`] ? t(`mode.${s.mode}.text`) : '' };
+};
+const catLabel = (id) => (T[`cat.${id}`] ? t(`cat.${id}`) : id);
+const catHint = (id) => (T[`cat.${id}.hint`] ? t(`cat.${id}.hint`) : '');
+const agentOf = (id) => data?.agents.find((a) => a.id === id) ?? { id, label: id };
+const agentTag = (id) => `<span class="agent-tag"><i class="adot" style="--c:var(--ag-${esc(id)})"></i>${esc(agentOf(id).label)}</span>`;
+const whereOf = (s) => ({
+  user: t('where.user'),
+  system: t('where.system'),
+  project: t('where.project', { p: short(s.project) }),
+  plugin: s.project ? t('where.projectPlugin', { p: short(s.project) }) : t('where.plugin'),
+}[s.scope] ?? t('where.other'));
+function originLabel(o = {}) {
+  if (o.kind === 'plugin') return t('origin.plugin', { p: o.label });
+  if (o.kind === 'local') return t('origin.local');
+  if (o.kind === 'project') return t('origin.project', { p: o.label });
+  if (o.kind === 'builtin') return t('origin.builtin', { p: o.label });
+  if (o.kind === 'unknown') return t('origin.unknown');
+  return o.label ?? '';
+}
+function originVia(o = {}) {
+  const v = o.via ?? {};
+  if (typeof v === 'string') return v;
+  if (v.kind === 'set') return t('via.set', { s: v.set });
+  if (v.kind === 'npx') return 'npx skills';
+  if (v.kind === 'marketplace') return t('via.marketplace', { m: v.marketplace, r: v.repo ? ` (${v.repo})` : '' });
+  if (v.kind === 'pack') return t('via.pack', { p: v.pack });
+  return T[`via.${v.kind}`] ? t(`via.${v.kind}`) : '';
+}
+
+const INFO = {
+  fixed: { n: 2, link: 'cost' },
+  idle: { n: 2, link: 'tidy' },
+  calls: { n: 2, link: 'agents' },
+  installed: { n: 2, link: 'modes' },
+  ctx: { n: 2, link: 'cost' },
+  ledger: { n: 2, link: 'terms' },
+  measured: { n: 2, link: 'cost' },
+  agents: { n: 2, link: 'agents' },
+};
+
+let data = null;
+let view = saved.get('skill-dash-view') || 'category';
+let agentFilter = saved.get('skill-dash-agent') || '';
+let metric = saved.get('skill-dash-metric') || 'calls';
+let os = /Win/i.test(navigator.userAgent) ? 'win' : 'unix';
+let modeFilter = '';
+let sort = { key: 'listing', dir: -1 };
+const expanded = new Set();
+
+const listing = (s) => s.listingExact ?? s.listingTokens;
+const body = (s) => s.bodyExact ?? s.bodyTokens;
+// The collector decides: a duplicate copy is not idle when another copy of it was used.
+const isIdle = (s) => s.idle ?? (s.listingTokens > 0 && s.uses30 === 0);
+const rowId = (s) => `${s.agent}|${s.scope}|${s.project}|${s.name}|${s.path}`;
+const inAgent = (s) => !agentFilter || s.agent === agentFilter;
+// Agents worth showing: found on this PC or with collected history.
+const presentAgents = () => (data?.agents ?? []).filter((a) => a.found || a.transcripts);
+const shownAgents = () => presentAgents().filter((a) => !agentFilter || a.id === agentFilter);
+
+// ---------- static text ----------
+function applyStatic() {
+  document.documentElement.lang = LANGS[lang].html;
+  for (const el of document.querySelectorAll('[data-i18n]')) el.textContent = t(el.dataset.i18n);
+  for (const el of document.querySelectorAll('[data-i18n-html]')) el.innerHTML = t(el.dataset.i18nHtml);
+  for (const el of document.querySelectorAll('[data-i18n-attr]')) {
+    for (const pair of el.dataset.i18nAttr.split(';')) {
+      const [attr, key] = pair.split(':');
+      el.setAttribute(attr, t(key));
+    }
+  }
+  $('lang').value = lang;
+  applyTheme(theme);
+  drawCostBars();
+  fillLive();
+  if (!data) $('stamp').textContent = t('stamp.loading');
+}
+function fillLive() {
+  const listed = data
+    ? `${data.agents.filter((a) => a.totals.visible).map((a) => `${a.label} ${fmt(a.totals.globalListing)}`).join(' · ')} ${t('unit.tokens')}`
+    : '…';
+  for (const el of document.querySelectorAll('[data-live="listing"]')) el.textContent = listed;
+  for (const el of document.querySelectorAll('[data-live^="agent:"]')) {
+    const a = data?.agents.find((x) => x.id === el.dataset.live.slice(6));
+    el.textContent = !a ? '…' : !a.found && !a.transcripts ? t('g.ag.missing') : t('g.ag.status', { n: fmt(a.transcripts), s: fmt(a.totals.skills) });
+    el.classList.toggle('off', !!a && !a.transcripts);
+  }
+  for (const el of document.querySelectorAll('[data-live="exact"]')) {
+    el.textContent = !data ? '…' : data.exactKeyVar ? t('g.exact.live.on', { v: data.exactKeyVar }) : t('g.exact.live.off');
+  }
+}
+$('lang').addEventListener('change', () => {
+  lang = $('lang').value;
+  saved.set('skill-dash-lang', lang);
+  applyStatic();
+  setOs(os);
+  if (data) render();
+  route(false);
+});
+
+// ---------- tooltip (hover/focus) and info popover (click) ----------
+const tip = $('tip');
+function placeNear(el, box, gap = 10) {
+  const r = el.getBoundingClientRect();
+  box.hidden = false;
+  const b = box.getBoundingClientRect();
+  let top = r.top - b.height - gap;
+  if (top < 8) top = r.bottom + gap;
+  const left = Math.min(Math.max(8, r.left + r.width / 2 - b.width / 2), window.innerWidth - b.width - 8);
+  box.style.top = `${top}px`;
+  box.style.left = `${left}px`;
+}
+function showTip(el) {
+  tip.textContent = el.getAttribute('data-tip');
+  placeNear(el, tip);
+}
+document.addEventListener('pointerover', (e) => {
+  const el = e.target.closest('[data-tip]');
+  if (el) showTip(el);
+});
+document.addEventListener('pointerout', (e) => {
+  const el = e.target.closest('[data-tip]');
+  if (el && !el.contains(e.relatedTarget)) tip.hidden = true;
+});
+document.addEventListener('focusin', (e) => {
+  const el = e.target.closest('[data-tip]');
+  if (el) showTip(el);
+});
+document.addEventListener('focusout', () => { tip.hidden = true; });
+document.addEventListener('scroll', () => { tip.hidden = true; }, true);
+
+const pop = $('pop');
+let popOwner = null;
+function closePop() {
+  pop.hidden = true;
+  popOwner?.setAttribute('aria-expanded', 'false');
+  popOwner = null;
+}
+function openPop(btn) {
+  const key = btn.dataset.pop;
+  const info = INFO[key];
+  if (!info) return;
+  if (popOwner === btn) return closePop();
+  closePop();
+  const paras = [...Array(info.n)].map((_, i) => `<p>${esc(t(`i.${key}.${i + 1}`))}</p>`).join('');
+  pop.innerHTML = `<h4>${esc(t(`i.${key}.t`))}</h4>${paras}<a class="more" href="#/guide/${info.link}">${esc(t('pop.more'))}</a>`;
+  placeNear(btn, pop);
+  btn.setAttribute('aria-expanded', 'true');
+  popOwner = btn;
+}
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-pop]');
+  if (btn) return openPop(btn);
+  if (popOwner && !pop.contains(e.target)) closePop();
+  if (e.target.closest('#pop a')) closePop();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closePop(); tip.hidden = true; }
+});
+
+// ---------- pages ----------
+function route(scroll = true) {
+  const [page, section] = window.location.hash.replace(/^#\/?/, '').split('/');
+  const current = page === 'guide' ? 'guide' : 'board';
+  $('page-board').hidden = current !== 'board';
+  $('page-guide').hidden = current !== 'guide';
+  for (const a of document.querySelectorAll('nav.pages a')) {
+    if (a.dataset.page === current) a.setAttribute('aria-current', 'page');
+    else a.removeAttribute('aria-current');
+  }
+  document.title = t(current === 'guide' ? 'title.guide' : 'title.board');
+  if (!scroll) return;
+  closePop();
+  tip.hidden = true;
+  const target = section && $(`g-${section}`);
+  if (target) target.scrollIntoView({ block: 'start' });
+  else window.scrollTo(0, 0);
+  markToc(section || 'start');
+}
+function markToc(id) {
+  for (const a of document.querySelectorAll('.toc a')) a.classList.toggle('active', a.getAttribute('href') === `#/guide/${id}`);
+}
+window.addEventListener('hashchange', () => route());
+const tocObserver = new IntersectionObserver((entries) => {
+  for (const e of entries) if (e.isIntersecting) markToc(e.target.id.slice(2));
+}, { rootMargin: '-90px 0px -65% 0px' });
+for (const s of document.querySelectorAll('.doc section')) tocObserver.observe(s);
+
+// ---------- data ----------
+function notice(msg) {
+  $('notice').hidden = !msg;
+  $('notice-text').textContent = msg ?? '';
+}
+
+async function load(exact) {
+  notice(null);
+  $('refresh').disabled = true;
+  $('exact').setAttribute('aria-disabled', 'true');
+  $('refresh').textContent = t('btn.collecting');
+  if (!data) $('stamp').textContent = t('stamp.first');
+  try {
+    const r = await fetch(`/api/stats${exact ? '?exact=1' : ''}`);
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.statusText);
+    data = j;
+    render();
+  } catch (e) {
+    notice(t('notice.fail', { msg: e.message }));
+  } finally {
+    $('refresh').disabled = false;
+    $('refresh').textContent = t('btn.refresh');
+    // aria-disabled instead of disabled, so hovering still explains why it is off.
+    $('exact').setAttribute('aria-disabled', String(!data?.exactAvailable));
+  }
+}
+
+function render() {
+  const when = new Date(data.generatedAt);
+  $('stamp').textContent = t('stamp.collected', {
+    date: when.toLocaleDateString(locale(), { month: 'long', day: 'numeric' }),
+    time: when.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' }),
+  });
+  $('stamp').setAttribute('data-tip', t('stamp.tip', {
+    n: fmt(data.transcripts),
+    since: data.firstEvent ? t('stamp.since', { date: new Date(data.firstEvent).toLocaleDateString(locale()) }) : '',
+    store: data.store,
+  }));
+  $('exact').setAttribute('data-tip', data.exactAvailable ? t('exact.on', { model: data.countModel, v: data.exactKeyVar }) : t('exact.off'));
+  if (data.exactError) notice(t('notice.exact', { msg: data.exactError }));
+  if (agentFilter && !presentAgents().some((a) => a.id === agentFilter)) agentFilter = '';
+  fillLive();
+
+  renderAgentBar();
+  renderSummary();
+  renderAgents();
+  renderContext();
+  renderDaily();
+  renderTop();
+  const cat = $('f-cat');
+  const keep = cat.value;
+  cat.innerHTML = `<option value="">${esc(t('led.cat.all'))}</option>` + data.categories.map((c) => `<option value="${c}">${esc(catLabel(c))}</option>`).join('');
+  cat.value = keep;
+  renderList();
+}
+
+function setAgent(id) {
+  agentFilter = id;
+  saved.set('skill-dash-agent', id);
+  if (data) render();
+}
+function renderAgentBar() {
+  const btn = (id, label, dot) => `<button data-v="${id}" aria-pressed="${agentFilter === id}">${dot ? `<i class="adot" style="--c:var(--ag-${id})"></i>` : ''}${esc(label)}</button>`;
+  $('agent').innerHTML = btn('', t('agents.all'), false) + presentAgents().map((a) => btn(a.id, a.label, true)).join('');
+}
+
+function stat(key, color, label, valueHtml, note) {
+  return `<div class="stat">
+    <div class="stat-label"><i class="key ${color}"></i>${esc(label)}<button class="info" data-pop="${key}" aria-label="${esc(t('info.of', { x: label }))}" aria-expanded="false">?</button></div>
+    ${valueHtml}
+    <div class="stat-note">${note}</div></div>`;
+}
+const bigValue = (v, unit) => `<div class="stat-value"><span class="num">${v}</span><span class="unit">${esc(unit)}</span></div>`;
+
+function renderSummary() {
+  const agents = shownAgents();
+  const skills = data.skills.filter(inAgent);
+  const installed = skills.filter((s) => s.scope !== 'other');
+  const count = (g) => installed.filter((s) => modeOf(s).group === g).length;
+  const idle = skills.filter(isIdle);
+  const idleCommon = idle.filter((s) => !s.project);
+  const est = (a) => (a.listingSource === 'estimate' ? ` · ${t('sum.fixed.est')}` : '');
+
+  let fixed;
+  if (agents.length === 1) {
+    const a = agents[0];
+    const common = installed.filter((s) => !s.project && listing(s) > 0);
+    const maxExtra = Math.max(0, ...Object.values(a.totals.projectListing));
+    const snaps = data.snapshots;
+    const prev = snaps.length > 1 ? snaps.at(-2) : null;
+    const prevVal = prev ? prev.byAgent?.[a.id] ?? (a.id === 'claude' ? prev.globalListing : null) : null;
+    const delta = prevVal != null ? a.totals.globalListing - prevVal : 0;
+    const parts = [t('sum.fixed.note', { n: fmt(common.length) })];
+    if (maxExtra) parts.push(t('sum.fixed.proj', { n: fmt(maxExtra) }));
+    if (delta) parts.push(t('sum.fixed.delta', { d: `${delta > 0 ? '+' : ''}${fmt(delta)}` }));
+    fixed = stat('fixed', 'always', t('sum.fixed'), bigValue(fmt(a.totals.globalListing), t('unit.tokens')), esc(parts.join(' · ') + est(a)));
+  } else {
+    const rows = agents.map((a) => `<div><i class="adot" style="--c:var(--ag-${a.id})"></i><span>${esc(a.label)}</span><b>${fmt(a.totals.globalListing)}</b></div>`).join('');
+    fixed = stat('fixed', 'always', t('sum.fixed'), `<div class="stat-multi">${rows}</div>`, esc(t('sum.fixed.all')));
+  }
+  const uses30 = sum(agents, (a) => a.totals.uses30);
+  const byAgentCalls = agents.length > 1 ? `<br>${agents.filter((a) => a.totals.uses30).map((a) => `${esc(a.label)} ${fmt(a.totals.uses30)}`).join(' · ')}` : '';
+  $('summary').innerHTML = [
+    fixed,
+    stat('idle', 'warn', t('sum.idle'), bigValue(fmt(idle.length), t('unit.skills')),
+      `${esc(t('sum.idle.note', { n: fmt(sum(idleCommon, listing)) }))} <button class="link" id="show-idle">${esc(t('sum.idle.show'))}</button>`),
+    stat('calls', 'onuse', t('sum.calls'), bigValue(fmt(uses30), t('unit.calls')),
+      esc(t('sum.calls.note', { m: fmt(sum(agents, (a) => a.totals.uses30ByModel)), u: fmt(sum(agents, (a) => a.totals.uses30ByUser)) })) + byAgentCalls),
+    stat('installed', 'ink', t('sum.installed'), bigValue(fmt(installed.length), t('unit.skills')),
+      esc(t('sum.installed.note', { a: count('auto'), m: count('manual'), o: count('off') }))),
+  ].join('');
+  $('show-idle').addEventListener('click', () => {
+    resetFilters();
+    $('f-idle').checked = true;
+    renderList();
+    $('ledger').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
+// ---------- per-agent comparison ----------
+function renderAgents() {
+  const rows = data.agents;
+  const max = (f) => Math.max(1, ...rows.map(f));
+  const mL = max((a) => a.totals.globalListing), mC = max((a) => a.totals.uses30), mR = max((a) => a.usage30.requests), mI = max((a) => a.usage30.input);
+  const cell = (label, shown, value, top, color, sub) => `<td class="r" data-label="${esc(label)}"><div class="cell-bar">
+      <span class="v">${shown}</span><span class="track"><i style="width:${(value / top) * 100}%;background:${color}"></i></span>
+      ${sub ? `<span class="cell-sub">${sub}</span>` : ''}</div></td>`;
+  const head = ['ag.col.agent', 'ag.col.listing', 'ag.col.calls', 'ag.col.requests', 'ag.col.input', 'ag.col.share']
+    .map((k, i) => `<th class="${i ? 'r' : ''}">${esc(t(k))}</th>`).join('');
+  const rowsHtml = rows.map((a) => {
+    const absent = !a.found && !a.transcripts;
+    const share = a.usage30.input && a.totals.globalListing ? (a.usage30.requests * a.totals.globalListing) / a.usage30.input : null;
+    const status = absent ? t('ag.missing') : a.transcripts ? t('ag.logs', { n: fmt(a.transcripts) }) : t('ag.nologs');
+    const dup = a.totals.dup?.count ? `<div><span class="flag">${esc(t('ag.dup', { n: fmt(a.totals.dup.count), t: fmt(a.totals.dup.tokens) }))}</span></div>` : '';
+    return `<tr class="agent-row${absent ? ' absent' : ''}" data-agent="${esc(a.id)}" style="--c:var(--ag-${esc(a.id)})" ${absent ? '' : 'tabindex="0"'} aria-selected="${agentFilter === a.id}">
+      <td><div class="ag-name"><i class="adot"></i><b>${esc(a.label)}</b>${a.experimental ? `<span class="pill">${esc(t('ag.exp'))}</span>` : ''}</div>
+        <div class="cell-sub">${esc(status)}</div>${dup}</td>
+      ${cell(t('ag.col.listing'), `<span class="tok always">${fmt(a.totals.globalListing)}</span>`, a.totals.globalListing, mL, 'var(--always)', esc(t(`ag.src.${a.listingSource}`)))}
+      ${cell(t('ag.col.calls'), fmt(a.totals.uses30), a.totals.uses30, mC, 'var(--onuse)', esc(t('ag.split', { m: fmt(a.totals.uses30ByModel), u: fmt(a.totals.uses30ByUser) })))}
+      ${cell(t('ag.col.requests'), fmt(a.usage30.requests), a.usage30.requests, mR, 'var(--muted)', esc(t('ag.sessions', { n: fmt(a.usage30.sessions) })))}
+      ${cell(t('ag.col.input'), compact(a.usage30.input), a.usage30.input, mI, 'var(--muted)', esc(t('ag.output', { n: compact(a.usage30.output) })))}
+      <td class="r" data-label="${esc(t('ag.col.share'))}"><span class="tok" data-tip="${esc(t('ag.share.tip'))}" tabindex="0">${share == null ? '–' : pct(share)}</span></td>
+    </tr>`;
+  }).join('');
+  const cols = ['name', 'list', 'calls', 'req', 'in', 'share'].map((c) => `<col class="a-${c}">`).join('');
+  $('agents').innerHTML = `<div class="table-wrap"><table class="cmp"><colgroup>${cols}</colgroup><thead><tr>${head}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+}
+$('agents').addEventListener('click', (e) => {
+  if (e.target.closest('[data-tip]') && e.target.closest('td:last-child')) return;
+  const tr = e.target.closest('tr.agent-row:not(.absent)');
+  if (tr) setAgent(agentFilter === tr.dataset.agent ? '' : tr.dataset.agent);
+});
+$('agents').addEventListener('keydown', (e) => {
+  const tr = e.target.closest('tr.agent-row:not(.absent)');
+  if (!tr || e.target !== tr || (e.key !== 'Enter' && e.key !== ' ')) return;
+  e.preventDefault();
+  setAgent(agentFilter === tr.dataset.agent ? '' : tr.dataset.agent);
+});
+$('agent').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (b) setAgent(b.dataset.v);
+});
+
+// ---------- context strip ----------
+function renderContext() {
+  const visible = data.skills.filter((s) => inAgent(s) && listing(s) > 0);
+  const byTokens = (a, b) => listing(b) - listing(a);
+  const groups = shownAgents().map((a) => {
+    const own = visible.filter((s) => s.agent === a.id);
+    const common = own.filter((s) => !s.project).sort(byTokens);
+    const projects = [...new Set(own.filter((s) => s.project).map((s) => s.project))]
+      .map((p) => ({ p, skills: own.filter((s) => s.project === p).sort(byTokens) }))
+      .sort((x, y) => sum(y.skills, listing) - sum(x.skills, listing));
+    return { a, common, commonTotal: sum(common, listing), projects };
+  }).filter((g) => g.common.length || g.projects.length);
+  // One scale for every row, so widths compare across agents too.
+  const max = Math.max(1, ...groups.map((g) => g.commonTotal + Math.max(0, ...g.projects.map((x) => sum(x.skills, listing)))));
+  const seg = (s) => `<span class="ctx-seg${isIdle(s) ? ' idle' : ''}${s.dup ? ' dup' : ''}" style="width:${(listing(s) / max) * 100}%" data-pick="${esc(rowId(s))}"
+    data-tip="${esc(t('ctx.seg', { name: s.name, n: fmt(listing(s)), u: s.uses30 }) + (isIdle(s) ? t('ctx.seg.idle') : '') + (s.dup ? t('ctx.seg.dup') : ''))}"></span>`;
+  const track = (skills, extra = '') => `<div class="ctx-track${skills.length > 60 ? ' dense' : ''}">${extra}${skills.map(seg).join('')}</div>`;
+  $('ctx').innerHTML = groups.length ? groups.map(({ a, common, commonTotal, projects }) => `<div class="ctx-agent">
+      <div class="ctx-agent-h"><i class="adot" style="--c:var(--ag-${a.id})"></i><b>${esc(a.label)}</b><span>${esc(t(`ag.src.${a.listingSource}`))}</span></div>
+      ${common.length ? `<div class="ctx-row"><div class="ctx-label"><b>${esc(t('ctx.all'))}</b><span>${esc(t('ctx.all.sub'))}</span></div>
+        ${track(common)}
+        <div class="ctx-total num">${fmt(commonTotal)}<small>${esc(t('unit.tokens'))}</small></div></div>` : ''}
+      ${projects.map((x) => `<div class="ctx-row"><div class="ctx-label"><b>${esc(short(x.p))}</b><span>${esc(t('ctx.proj.sub'))}</span></div>
+        ${track(x.skills, `<span class="ctx-seg base" style="width:${(commonTotal / max) * 100}%">${esc(t('ctx.common', { n: fmt(commonTotal) }))}</span>`)}
+        <div class="ctx-total num">${fmt(commonTotal + sum(x.skills, listing))}<small>+${fmt(sum(x.skills, listing))}</small></div></div>`).join('')}
+    </div>`).join('') : `<p class="empty">${esc(t('ctx.empty'))}</p>`;
+}
+
+// ---------- daily chart: stacked by agent ----------
+function setMetric(v) {
+  metric = v;
+  saved.set('skill-dash-metric', v);
+  for (const b of $('metric').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === v));
+}
+function renderDaily() {
+  const days = data.daily;
+  const valueOf = (d, id) => (metric === 'tokens' ? (d.tokens?.[id]?.input ?? 0) + (d.tokens?.[id]?.output ?? 0) : d.byAgent?.[id] ?? 0);
+  const series = shownAgents().filter((a) => days.some((d) => valueOf(d, a.id)));
+  const totals = days.map((d) => sum(series, (a) => valueOf(d, a.id)));
+  const total = sum(totals, (x) => x);
+  const show = metric === 'tokens' ? compact : fmt;
+  $('daily-title').textContent = t(`daily.title.${metric}`);
+  $('daily-lead').textContent = t(`daily.lead.${metric}`);
+  // A legend whenever two or more agents share the chart; one series is named by the agent picker.
+  $('daily-legend').innerHTML = series.length > 1
+    ? series.map((a) => `<span><i class="adot" style="--c:var(--ag-${a.id})"></i>${esc(a.label)} <b>${show(sum(days, (d) => valueOf(d, a.id)))}</b></span>`).join('') + `<span>${esc(t('daily.total'))} <b>${show(total)}</b></span>`
+    : series.length ? `<span>${esc(t('daily.total'))} <b>${show(total)}</b></span>` : '';
+  if (!total) {
+    $('daily').innerHTML = `<p class="empty">${esc(t('daily.empty'))}</p>`;
+    return;
+  }
+  // Draw at the container's real width so axis labels keep their size on phones.
+  const L = metric === 'tokens' ? 44 : 30;
+  const W = Math.max(280, Math.round($('daily').clientWidth || 640)), H = 170, B = 24, T0 = 8;
+  const max = Math.max(1, ...totals);
+  const w = (W - L) / days.length;
+  const y = (v) => H - B - (v / max) * (H - B - T0);
+  const ticks = max >= 4 && metric === 'calls' && max % 2 === 0 ? [0, max / 2, max] : metric === 'tokens' ? [0, max / 2, max] : [0, max];
+  const bars = days.map((d, i) => {
+    let cum = 0;
+    const x = L + i * w + 2, bw = Math.max(2, w - 4);
+    const segs = series.map((a) => {
+      const v = valueOf(d, a.id);
+      if (!v) return '';
+      const top = y(cum + v), bottom = y(cum);
+      // A 2px surface gap between stacked segments.
+      const gap = cum > 0 ? 2 : 0;
+      cum += v;
+      const h = Math.max(1, bottom - top - gap);
+      return `<rect x="${x}" y="${top}" width="${bw}" height="${h}" rx="2" style="fill:var(--ag-${a.id})"/>`;
+    }).join('');
+    const lines = series.filter((a) => valueOf(d, a.id)).map((a) => `${a.label}: ${show(valueOf(d, a.id))}`);
+    const tipText = `${dayDate(d.date)}\n${lines.join('\n')}${lines.length > 1 ? `\n${t('daily.total')}: ${show(totals[i])}` : ''}`;
+    const hit = totals[i] ? `<rect class="hit" x="${L + i * w}" y="${T0}" width="${w}" height="${H - B - T0}" data-tip="${esc(tipText)}"/>` : '';
+    return segs + hit;
+  }).join('');
+  const what = t(`daily.metric.${metric}`);
+  $('daily').innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(t('daily.aria', { what, n: show(total) }))}">
+    ${ticks.map((v) => `<line class="grid" x1="${L}" x2="${W}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end">${show(Math.round(v))}</text>`).join('')}
+    ${bars}
+    ${(W < 480 ? [0, 14, 29] : [0, 7, 14, 21, 29]).map((i) => `<text x="${L + i * w + w / 2}" y="${H - 5}" text-anchor="middle">${days[i].date.slice(5).replace('-', '/')}</text>`).join('')}
+  </svg>`;
+}
+
+function renderTop() {
+  const top = data.skills.filter((s) => inAgent(s) && s.uses30 > 0).sort((a, b) => b.uses30 - a.uses30 || b.uses - a.uses).slice(0, 8);
+  const max = Math.max(1, ...top.map((s) => s.uses30));
+  $('top').innerHTML = top.length ? top.map((s) => `<li>
+      <span class="who"><button class="name" data-pick="${esc(rowId(s))}" data-tip="${esc(s.summary || s.name)}">${esc(s.name)}</button>${agentFilter ? '' : agentTag(s.agent)}</span>
+      <span class="n num">${esc(t('n.calls', { n: s.uses30 }))}</span>
+      <span class="track"><i style="width:${(s.uses30 / max) * 100}%"></i></span></li>`).join('')
+    : `<li class="empty">${esc(t('top.empty'))}</li>`;
+}
+
+// ---------- ledger ----------
+const COLS = [
+  { key: 'name', col: 'name' },
+  { key: 'origin', col: 'origin' },
+  { key: 'mode', col: 'mode' },
+  { key: 'listing', col: 'listing', r: true },
+  { key: 'body', col: 'body', r: true },
+  { key: 'uses30', col: 'uses', r: true },
+  { key: 'lastUsed', col: 'last', r: true },
+];
+const sortVal = (s, k) => ({ listing: listing(s), body: body(s), origin: originLabel(s.origin), mode: modeOf(s).label, lastUsed: s.lastUsed ?? '' }[k] ?? s[k] ?? '');
+
+function resetFilters() {
+  $('q').value = '';
+  $('f-scope').value = '';
+  $('f-cat').value = '';
+  $('f-idle').checked = false;
+  $('f-dup').checked = false;
+  setMode('');
+}
+function setMode(v) {
+  modeFilter = v;
+  for (const b of $('f-mode').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === v));
+}
+function setView(v) {
+  view = v;
+  saved.set('skill-dash-view', v);
+  for (const b of $('view').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === v));
+}
+
+function filtered() {
+  const q = $('q').value.trim().toLowerCase();
+  const cat = $('f-cat').value, scope = $('f-scope').value, idle = $('f-idle').checked, dup = $('f-dup').checked;
+  return data.skills
+    .filter(inAgent)
+    .filter((s) => !q || [s.name, s.summary, s.description, originLabel(s.origin), s.project, s.agent].some((v) => (v ?? '').toLowerCase().includes(q)))
+    .filter((s) => !cat || s.category === cat)
+    .filter((s) => !modeFilter || modeOf(s).group === modeFilter)
+    .filter((s) => !scope || s.scope === scope)
+    .filter((s) => !idle || isIdle(s))
+    .filter((s) => !dup || s.dup)
+    .sort((a, b) => {
+      const va = sortVal(a, sort.key), vb = sortVal(b, sort.key);
+      const c = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), locale());
+      return c * sort.dir || a.name.localeCompare(b.name) || a.agent.localeCompare(b.agent);
+    });
+}
+
+function renderList() {
+  const rows = filtered();
+  const all = data.skills.filter(inAgent);
+  const active = $('q').value || $('f-cat').value || $('f-scope').value || $('f-idle').checked || $('f-dup').checked || modeFilter;
+  $('count').textContent = t('led.count', { n: fmt(rows.length), t: fmt(all.length) });
+  $('reset').hidden = !active;
+  if (!rows.length) {
+    $('list').innerHTML = `<p class="empty">${esc(t('led.empty'))}</p>`;
+    return;
+  }
+  if (view === 'flat') {
+    $('list').innerHTML = table(rows);
+    return;
+  }
+  const keyOf = view === 'category' ? (s) => s.category : (s) => originLabel(s.origin) || '?';
+  const groups = new Map();
+  for (const s of rows) groups.set(keyOf(s), [...(groups.get(keyOf(s)) ?? []), s]);
+  const order = view === 'category'
+    ? data.categories.filter((id) => groups.has(id))
+    : [...groups.keys()].sort((a, b) => sum(groups.get(b), listing) - sum(groups.get(a), listing) || groups.get(b).length - groups.get(a).length);
+  $('list').innerHTML = order.map((k) => {
+    const list = groups.get(k);
+    const o = list[0].origin ?? {};
+    const title = view === 'category' ? esc(catLabel(k)) : esc(k);
+    const hint = view === 'category' ? esc(catHint(k))
+      : [o.url ? `<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.url.replace(/^https?:\/\//, ''))}</a>` : '', esc([...new Set(list.map(whereOf))].join(', '))].filter(Boolean).join(' · ');
+    const idle = list.filter(isIdle).length;
+    const key = `${view}:${view === 'category' ? k : o.kind === 'repo' ? o.label : `${o.kind}:${o.label}`}`;
+    const closed = saved.get(`skill-dash-closed:${key}`) === '1';
+    return `<details class="group" data-key="${esc(key)}"${closed ? '' : ' open'}>
+      <summary>
+        <svg class="caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <h3>${title}</h3><span class="hint">${hint}</span>
+        <span class="facts"><span>${t('grp.count', { n: list.length })}</span><span>${t('grp.tokens', { n: fmt(sum(list, listing)) })}</span><span>${t('grp.calls', { n: fmt(sum(list, (s) => s.uses30)) })}</span>${idle ? `<span class="flag" style="margin:0">${esc(t('grp.idle', { n: idle }))}</span>` : ''}</span>
+      </summary>
+      ${table(list)}</details>`;
+  }).join('');
+}
+
+function table(rows) {
+  const head = COLS.map((c) => `<th class="${c.r ? 'r' : ''}"${sort.key === c.key ? ` aria-sort="${sort.dir > 0 ? 'ascending' : 'descending'}"` : ''}>
+    <button data-sort="${c.key}" data-tip="${esc(t(`col.${c.col}.tip`))}">${esc(t(`col.${c.col}`))}</button></th>`).join('');
+  const cols = COLS.map((c) => `<col class="c-${c.col}">`).join('');
+  return `<div class="table-wrap"><table class="ledger"><colgroup>${cols}</colgroup><thead><tr>${head}</tr></thead><tbody>${rows.map(row).join('')}</tbody></table></div>`;
+}
+
+function spark(daily, W = 64, H = 18) {
+  const max = Math.max(1, ...daily), w = W / daily.length;
+  return `<svg width="${W}" height="${H + 1}" viewBox="0 0 ${W} ${H + 1}" aria-hidden="true">
+    <line x1="0" x2="${W}" y1="${H + 0.5}" y2="${H + 0.5}"/>
+    ${daily.map((c, i) => c ? `<rect x="${i * w}" y="${H - (c / max) * H}" width="${Math.max(1, w - 0.6)}" height="${(c / max) * H}"/>` : '').join('')}</svg>`;
+}
+
+function row(s) {
+  const id = rowId(s);
+  const m = modeOf(s);
+  const o = s.origin ?? {};
+  const lst = listing(s);
+  const open = expanded.has(id);
+  const summary = s.summary || (s.mode === 'not-installed' ? t('row.notInstalled') : t('row.noDesc'));
+  const flags = [isIdle(s) ? `<span class="flag">${esc(t('row.flag.idle'))}</span>` : '', s.dup ? `<span class="flag">${esc(t('row.flag.dup'))}</span>` : ''].filter(Boolean).join('');
+  const cells = `<tr class="row${open ? ' open' : ''}" data-id="${esc(id)}" tabindex="0" aria-expanded="${open}">
+    <td><div class="sk-name">${esc(s.name)}</div><div class="sk-sum">${esc(summary)}</div></td>
+    <td><div class="origin-name">${esc(originLabel(o))}</div><div class="origin-loc">${agentFilter ? '' : agentTag(s.agent)}<span>${esc(whereOf(s))}</span></div></td>
+    <td data-label="${esc(t('col.mode'))}"><span class="mode" data-tip="${esc(m.text)}"><i class="dot ${m.dot}"></i>${esc(m.label)}</span></td>
+    <td class="r" data-label="${esc(t('col.listing'))}"><span class="tok ${lst ? 'always' : 'zero'}">${lst ? fmt(lst) : '0'}${s.listingExact != null ? '*' : ''}</span></td>
+    <td class="r" data-label="${esc(t('col.body'))}"><span class="tok ${s.path ? 'onuse' : 'zero'}">${s.path ? fmt(body(s)) + (s.bodyExact != null ? '*' : '') : '–'}</span></td>
+    <td class="r" data-label="${esc(t('col.uses'))}"><span class="uses">${spark(s.daily)}<span class="tok ${s.uses30 ? '' : 'zero'}">${fmt(s.uses30)}</span></span>
+      ${flags ? `<div class="flags">${flags}</div>` : ''}</td>
+    <td class="r" data-label="${esc(t('col.last'))}"><span class="when${s.lastUsed ? '' : ' none'}">${s.lastUsed ? ago(s.lastUsed) : t('row.never')}</span></td>
+  </tr>`;
+  if (!open) return cells;
+  const projects = Object.entries(s.byProject).sort((a, b) => b[1] - a[1]).map(([p, n]) => t('dd.projectCalls', { p: esc(short(p) || p), n })).join(', ');
+  const policy = s.policy ? t(`policy.${s.policy}`) : '';
+  const originLink = o.url ? `<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(originLabel(o))}</a>` : esc(originLabel(o));
+  const via = originVia(o);
+  return cells + `<tr class="detail"><td colspan="${COLS.length}"><div class="detail-body">
+    <div>
+      <p class="desc">${esc(s.description) || esc(summary)}</p>
+      <h4>${esc(t('dd.chart'))}</h4>
+      <div class="chart">${detailChart(s.daily)}</div>
+    </div>
+    <dl>
+      <dt>${esc(t('dt.agent'))}</dt><dd>${agentTag(s.agent)}</dd>
+      <dt>${esc(t('dt.origin'))}</dt><dd>${originLink}${via ? `<span class="sub">${esc(via)}</span>` : ''}</dd>
+      <dt>${esc(t('dt.where'))}</dt><dd>${esc(whereOf(s))}${s.path ? `<div class="path">${esc(s.path)}</div>` : ''}${s.dup ? `<span class="sub">${esc(t('dd.dup'))}</span>` : ''}</dd>
+      <dt>${esc(t('dt.category'))}</dt><dd>${esc(catLabel(s.category))}</dd>
+      <dt>${esc(t('dt.mode'))}</dt><dd>${esc(m.label)}. ${esc(m.text)}${policy ? `<span class="sub">${esc(policy)}</span>` : ''}</dd>
+      <dt>${esc(t('dt.calls'))}</dt><dd>${esc(t('dd.calls', { n: fmt(s.uses), m: fmt(s.byModel), u: fmt(s.byUser) }))}${projects ? `<span class="sub">${projects}</span>` : ''}</dd>
+      <dt>${esc(t('dt.measured'))} <button class="info" data-pop="measured" aria-label="${esc(t('info.of', { x: t('dt.measured') }))}" aria-expanded="false">?</button></dt>
+      <dd>${s.contextDelta != null ? t('dd.measured', { n: fmt(s.contextDelta) }) : esc(t('dd.noMeasure'))}</dd>
+    </dl></div></td></tr>`;
+}
+
+function detailChart(daily) {
+  const W = 420, H = 90, B = 18, max = Math.max(1, ...daily), w = W / daily.length;
+  const y = (v) => H - B - (v / max) * (H - B - 6);
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(t('dd.chart'))}">
+    <line class="grid" x1="0" x2="${W}" y1="${H - B}" y2="${H - B}"/>
+    ${daily.map((c, i) => c ? `<rect class="bar" x="${i * w + 1.5}" y="${y(c)}" width="${w - 3}" height="${H - B - y(c)}" rx="2" data-tip="${esc(`${29 - i === 0 ? t('ago.today') : t('ago.days', { n: 29 - i })} · ${t('n.calls', { n: c })}`)}"/>` : '').join('')}
+    <text x="0" y="${H - 3}">${esc(t('dd.30ago'))}</text><text x="${W}" y="${H - 3}" text-anchor="end">${esc(t('ago.today'))}</text></svg>`;
+}
+
+function pick(id) {
+  const s = data.skills.find((x) => rowId(x) === id);
+  if (!s) return;
+  if (window.location.hash.startsWith('#/guide')) window.location.hash = '#/board';
+  resetFilters();
+  if (agentFilter && agentFilter !== s.agent) setAgent('');
+  $('q').value = s.name;
+  expanded.add(id);
+  renderList();
+  const el = document.querySelector(`tr.row[data-id="${CSS.escape(id)}"]`);
+  (el ?? $('ledger')).scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// ---------- events ----------
+$('list').addEventListener('click', (e) => {
+  if (e.target.closest('a, [data-pop]')) return;
+  const sortBtn = e.target.closest('[data-sort]');
+  if (sortBtn) {
+    const key = sortBtn.dataset.sort;
+    sort = { key, dir: sort.key === key ? -sort.dir : ['name', 'origin', 'mode'].includes(key) ? 1 : -1 };
+    return renderList();
+  }
+  const tr = e.target.closest('tr.row');
+  if (!tr) return;
+  const id = tr.dataset.id;
+  expanded.has(id) ? expanded.delete(id) : expanded.add(id);
+  renderList();
+});
+$('list').addEventListener('keydown', (e) => {
+  const tr = e.target.closest('tr.row');
+  if (!tr || e.target !== tr || (e.key !== 'Enter' && e.key !== ' ')) return;
+  e.preventDefault();
+  tr.click();
+});
+$('list').addEventListener('toggle', (e) => {
+  const key = e.target.dataset?.key;
+  if (key) saved.set(`skill-dash-closed:${key}`, e.target.open ? '0' : '1');
+}, true);
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-pick]');
+  if (el && data) pick(el.dataset.pick);
+});
+$('view').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  setView(b.dataset.v);
+  if (data) renderList();
+});
+$('f-mode').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  setMode(b.dataset.v);
+  if (data) renderList();
+});
+$('metric').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  setMetric(b.dataset.v);
+  if (data) renderDaily();
+});
+for (const id of ['q', 'f-cat', 'f-scope', 'f-idle', 'f-dup']) $(id).addEventListener('input', () => data && renderList());
+$('reset').addEventListener('click', () => { resetFilters(); renderList(); });
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => data && renderDaily(), 150);
+});
+$('refresh').addEventListener('click', () => load(false));
+$('exact').addEventListener('click', () => {
+  if ($('exact').getAttribute('aria-disabled') !== 'true') load(true);
+});
+for (const b of document.querySelectorAll('.copy')) {
+  b.addEventListener('click', async () => {
+    const text = b.parentElement.querySelector('pre').innerText;
+    try {
+      await navigator.clipboard.writeText(text);
+      b.textContent = t('copied');
+    } catch {
+      b.textContent = t('copyFail');
+    }
+    setTimeout(() => { b.textContent = t('copy'); }, 1500);
+  });
+}
+
+// Guide: pick the operating system for the environment variable recipes.
+function setOs(v) {
+  os = v;
+  for (const b of $('os').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === v));
+  for (const el of document.querySelectorAll('[data-os-block]')) el.hidden = el.dataset.osBlock !== v;
+}
+$('os').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (b) setOs(b.dataset.v);
+});
+
+// Diagram 2 bars: system prompt, skill listing, SKILL.md body (from request 3), growing conversation.
+function drawCostBars() {
+  const g = document.querySelector('#d2-bars');
+  const conv = [12, 26, 44, 60, 78, 96];
+  let out = '';
+  conv.forEach((c, i) => {
+    const x = 100 + i * 110, w = 62;
+    let top = 280;
+    const band = (h, cls) => { top -= h; out += `<rect class="${cls}" x="${x}" y="${top}" width="${w}" height="${h}"${cls === 'band-conv' ? ' rx="3"' : ''}/>`; };
+    band(56, 'band-sys');
+    band(24, 'band-list');
+    if (i >= 2) band(54, 'band-body');
+    band(c, 'band-conv');
+    out += `<text class="tick" x="${x + w / 2}" y="300" text-anchor="middle">${esc(t('d2.req', { n: i + 1 }))}</text>`;
+    if (i === 2) out += `<text class="note-onuse" x="${x + w / 2}" y="319" text-anchor="middle">${esc(t('d2.call'))}</text>`;
+  });
+  g.innerHTML = out;
+}
+
+// Missing translations show up as raw keys; list them once for whoever edits the strings.
+const missing = [...document.querySelectorAll('[data-i18n],[data-i18n-html]')].map((el) => el.dataset.i18n ?? el.dataset.i18nHtml).filter((k) => !T[k]);
+if (missing.length) console.warn('skill dashboard: missing strings', [...new Set(missing)]);
+
+setView(view);
+setMode('');
+setMetric(metric);
+setOs(os);
+applyStatic();
+route();
+load(false);
+</script>
+</body>
+</html>

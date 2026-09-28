@@ -16,6 +16,9 @@ const SELF = path.join(HERE, 'skill-policy.mjs').replace(/\\/g, '/');
 // Windows PowerShell writes UTF-8 with a BOM.
 const readJson = (p) => JSON.parse(fs.readFileSync(p, 'utf8').replace(/^﻿/, ''));
 const POLICY = readJson(path.join(HERE, 'policy.json'));
+// Skills turned off with skill-sets.mjs `off`. They must stay "off" even if policy.json says manual.
+const STATE_FILE = path.join(HERE, 'state.json');
+const DISABLED = fs.existsSync(STATE_FILE) ? readJson(STATE_FILE).disabled ?? [] : [];
 
 const SUPERPOWERS_CACHES = [
   path.join(CLAUDE, 'plugins', 'cache', 'superpowers-dev', 'superpowers'),
@@ -121,10 +124,10 @@ function collectDrift() {
     }
   }
   const overrides = settings.skillOverrides ?? {};
-  for (const name of POLICY.offSkills) {
+  for (const name of [...POLICY.offSkills, ...DISABLED.filter((n) => !POLICY.offSkills.includes(n))]) {
     if (overrides[name] !== 'off') drift.push({ msg: `skillOverrides.${name} is not "off"`, fix: (s) => { (s.user.skillOverrides ??= {})[name] = 'off'; } });
   }
-  for (const name of POLICY.manualSkills) {
+  for (const name of POLICY.manualSkills.filter((n) => !DISABLED.includes(n))) {
     if (overrides[name] !== 'user-invocable-only') {
       drift.push({ msg: `skillOverrides.${name} is not "user-invocable-only"`, fix: (s) => { (s.user.skillOverrides ??= {})[name] = 'user-invocable-only'; } });
     }

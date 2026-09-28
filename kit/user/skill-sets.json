@@ -1,0 +1,78 @@
+{
+  "$comment": "Skill set catalog, picked from https://github.com/ComposioHQ/awesome-claude-skills by category. setup.mjs user copies this to ~/.claude/skill-policy/ and overwrites it. Each skill: name = installed folder name (matches its SKILL.md name), repo = GitHub owner/repo, path = folder inside the repo ('' = repo root).",
+  "sets": {
+    "documents": {
+      "description": "Word, PDF, PowerPoint, Excel files and co-authoring docs (Anthropic official)",
+      "skills": [
+        { "name": "docx", "repo": "anthropics/skills", "path": "skills/docx" },
+        { "name": "pdf", "repo": "anthropics/skills", "path": "skills/pdf" },
+        { "name": "pptx", "repo": "anthropics/skills", "path": "skills/pptx" },
+        { "name": "xlsx", "repo": "anthropics/skills", "path": "skills/xlsx" },
+        { "name": "doc-coauthoring", "repo": "anthropics/skills", "path": "skills/doc-coauthoring" }
+      ]
+    },
+    "frontend": {
+      "description": "UI design, HTML artifacts, browser testing",
+      "skills": [
+        { "name": "frontend-design", "repo": "anthropics/skills", "path": "skills/frontend-design" },
+        { "name": "web-artifacts-builder", "repo": "anthropics/skills", "path": "skills/web-artifacts-builder" },
+        { "name": "webapp-testing", "repo": "anthropics/skills", "path": "skills/webapp-testing" },
+        { "name": "playwright-skill", "repo": "lackeyjb/playwright-skill", "path": "skills/playwright-skill" }
+      ]
+    },
+    "dev-tools": {
+      "description": "MCP servers, writing skills, changelogs",
+      "skills": [
+        { "name": "mcp-builder", "repo": "anthropics/skills", "path": "skills/mcp-builder" },
+        { "name": "skill-creator", "repo": "anthropics/skills", "path": "skills/skill-creator" },
+        { "name": "changelog-generator", "repo": "ComposioHQ/awesome-claude-skills", "path": "changelog-generator" }
+      ]
+    },
+    "data": {
+      "description": "CSV analysis, D3 charts, read-only PostgreSQL queries",
+      "skills": [
+        { "name": "csv-data-summarizer", "repo": "coffeefuelbump/csv-data-summarizer-claude-skill", "path": "" },
+        { "name": "d3-viz", "repo": "chrisvoncsefalvay/claude-d3js-skill", "path": "" },
+        { "name": "postgres", "repo": "sanjay3290/ai-skills", "path": "skills/postgres" }
+      ]
+    },
+    "research-writing": {
+      "description": "Research-backed writing, article and YouTube transcript extraction, meeting analysis",
+      "skills": [
+        { "name": "content-research-writer", "repo": "ComposioHQ/awesome-claude-skills", "path": "content-research-writer" },
+        { "name": "article-extractor", "repo": "michalparkola/tapestry-skills-for-claude-code", "path": "article-extractor" },
+        { "name": "youtube-transcript", "repo": "michalparkola/tapestry-skills-for-claude-code", "path": "youtube-transcript" },
+        { "name": "meeting-insights-analyzer", "repo": "ComposioHQ/awesome-claude-skills", "path": "meeting-insights-analyzer" }
+      ]
+    },
+    "business": {
+      "description": "Brand, internal comms, competitor ads, domain names, lead research",
+      "skills": [
+        { "name": "brand-guidelines", "repo": "anthropics/skills", "path": "skills/brand-guidelines" },
+        { "name": "internal-comms", "repo": "anthropics/skills", "path": "skills/internal-comms" },
+        { "name": "competitive-ads-extractor", "repo": "ComposioHQ/awesome-claude-skills", "path": "competitive-ads-extractor" },
+        { "name": "domain-name-brainstormer", "repo": "ComposioHQ/awesome-claude-skills", "path": "domain-name-brainstormer" },
+        { "name": "lead-research-assistant", "repo": "ComposioHQ/awesome-claude-skills", "path": "lead-research-assistant" }
+      ]
+    },
+    "creative": {
+      "description": "Posters, generative art, GIFs, themes, image enhancement",
+      "skills": [
+        { "name": "canvas-design", "repo": "anthropics/skills", "path": "skills/canvas-design" },
+        { "name": "algorithmic-art", "repo": "anthropics/skills", "path": "skills/algorithmic-art" },
+        { "name": "slack-gif-creator", "repo": "anthropics/skills", "path": "skills/slack-gif-creator" },
+        { "name": "theme-factory", "repo": "anthropics/skills", "path": "skills/theme-factory" },
+        { "name": "image-enhancer", "repo": "ComposioHQ/awesome-claude-skills", "path": "image-enhancer" }
+      ]
+    },
+    "productivity": {
+      "description": "File and invoice organizing, tailored resumes, raffle picking",
+      "skills": [
+        { "name": "file-organizer", "repo": "ComposioHQ/awesome-claude-skills", "path": "file-organizer" },
+        { "name": "invoice-organizer", "repo": "ComposioHQ/awesome-claude-skills", "path": "invoice-organizer" },
+        { "name": "tailored-resume-generator", "repo": "ComposioHQ/awesome-claude-skills", "path": "tailored-resume-generator" },
+        { "name": "raffle-winner-picker", "repo": "ComposioHQ/awesome-claude-skills", "path": "raffle-winner-picker" }
+      ]
+    }
+  }
+}
