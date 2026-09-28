@@ -1,0 +1,24 @@
+{
+  "$comment": "~/.claude/skill-policy/policy.json. setup.mjs creates this once and never overwrites it. Edit it here, then run: node ~/.claude/skill-policy/skill-policy.mjs --apply",
+  "offSkills": ["autoplan"],
+  "manualSkills": [
+    "cso", "qa", "qa-only", "retro", "codex", "benchmark", "canary", "devex-review", "health",
+    "office-hours", "plan-ceo-review", "plan-eng-review", "plan-design-review", "plan-devex-review",
+    "review", "ship", "land-and-deploy", "setup-deploy", "document-release", "investigate", "checkpoint", "learn",
+    "design-consultation", "design-html", "design-review", "design-shotgun",
+    "gstack", "connect-chrome", "open-gstack-browser", "pair-agent", "setup-browser-cookies", "gstack-upgrade",
+    "freeze", "unfreeze", "guard",
+    "html-wireframe", "html-prototype", "html-plan", "html-diagram", "design-artifact"
+  ],
+  "localOnlySkills": ["browseros-neo", "neo-naver-blog"],
+  "localSkillProjects": [],
+  "stripSuperpowersBootstrap": true,
+  "userPlugins": {
+    "enable": {
+      "superpowers@superpowers-dev": { "marketplace": "superpowers-dev", "source": "https://github.com/obra/superpowers.git" },
+      "codex@openai-codex": { "marketplace": "openai-codex", "source": "openai/codex-plugin-cc" }
+    },
+    "disable": ["expo@claude-plugins-official"]
+  },
+  "projectPluginRemovals": {}
+}

@@ -1,0 +1,3 @@
+interface:
+  display_name: "GitLab CI"
+  short_description: "Author, verify, and debug .gitlab-ci.yml pipelines"

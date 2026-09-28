@@ -1,0 +1,3 @@
+interface:
+  display_name: "Plan Board"
+  short_description: "Start, track, and finish a task through the roadmap and plan files"
