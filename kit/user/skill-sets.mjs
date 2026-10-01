@@ -2,28 +2,36 @@
 // node skill-sets.mjs list
 // node skill-sets.mjs add <set|skill>... [--project <dir>] [--force]
 // node skill-sets.mjs remove <set|skill>... [--project <dir>]
-// node skill-sets.mjs off <set|skill|plugin:<name>|all>...
-// node skill-sets.mjs on  <set|skill|plugin:<name>|all>...
+// node skill-sets.mjs off    <set|skill|plugin:<name>|all>...
+// node skill-sets.mjs on     <set|skill|plugin:<name>|all>...
+// node skill-sets.mjs manual <set|skill|all>...
 // node skill-sets.mjs status [--project <dir>]
+// on / off / manual write Claude Code's global value to the baseline (policy.json) and settings.json together,
+// the same way the dashboard's Invocation page does (skill-modes.mjs).
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
-  CLAUDE, USER_SKILLS, USER_SETTINGS, POLICY_DIR, POLICY_FILE, STATE_FILE,
-  exists, readJson, writeJson, fwd, estimateTokens, skillsIn, listingText, effectiveMode,
+  CLAUDE, USER_SKILLS, USER_SETTINGS, POLICY_DIR, STATE_FILE,
+  exists, readJson, writeJson, fwd, estimateTokens, skillsIn, listingText, effectiveMode, parseSkillMd,
 } from './skill-inventory.mjs';
+import { loadPolicy, policyValue, planChanges, writePlan } from './skill-modes.mjs';
 
-// STATE_FILE — installed: skills this tool copied. disabled / disabledPlugins: what `off` turned off.
+// STATE_FILE — installed: skills this tool copied. disabledPlugins: plugins `off` turned off.
+// Skill modes live in policy.json (modes.claude.global).
 const CACHE = path.join(POLICY_DIR, 'cache');
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CATALOG = path.join(HERE, 'skill-sets.json');
 const log = (msg) => console.log(msg);
 
 const catalog = readJson(CATALOG, { sets: {} }).sets;
-const policy = readJson(POLICY_FILE, {});
-const state = { installed: [], disabled: [], disabledPlugins: [], ...readJson(STATE_FILE) };
+// Moves a v1 policy (and state.json's old "disabled" list) to v2 first, so `state` below no longer has it.
+const policy = loadPolicy();
+const state = { installed: [], disabledPlugins: [], ...readJson(STATE_FILE) };
+delete state.disabled;
 const saveState = () => writeJson(STATE_FILE, state);
+const modeOf = (name) => policyValue(policy, 'claude', name);
 
 function parseArgs(argv) {
   const opts = { names: [], project: null, force: false };
@@ -95,28 +103,17 @@ function syncRepo(repo, paths) {
 
 // ---------- settings ----------
 
-function expectedOverride(name) {
-  if (state.disabled.includes(name) || policy.offSkills?.includes(name)) return 'off';
-  if (policy.manualSkills?.includes(name)) return 'user-invocable-only';
-  return undefined;
-}
+const SHOWN = { auto: 'on (auto)', manual: 'on, /name only', off: 'off', inherit: 'forgotten (no baseline value)' };
 
-function setSkills(names, on) {
-  const settings = readJson(USER_SETTINGS);
-  settings.skillOverrides ??= {};
+// value: auto | manual | off, or inherit to drop the skill from the baseline and settings.
+function setSkills(names, value) {
+  const changes = names.map((name) => ({ agent: 'claude', key: name, layer: 'global', kind: 'set', value }));
+  writePlan(planChanges(changes, policy));
   for (const name of names) {
-    state.disabled = state.disabled.filter((n) => n !== name);
-    if (!on) state.disabled.push(name);
-    const value = expectedOverride(name);
-    if (value) settings.skillOverrides[name] = value;
-    else delete settings.skillOverrides[name];
-    let shown = on ? 'on' : 'off';
-    if (on && value === 'off') shown = 'still off (policy.json offSkills)';
-    if (on && value === 'user-invocable-only') shown = 'on, /name only (policy.json manualSkills)';
-    log(`${name}: ${shown}`);
+    const md = [path.join(USER_SKILLS, name, 'SKILL.md'), ...state.installed.filter((i) => i.name === name).map((i) => path.join(i.dir, 'SKILL.md'))].find(exists);
+    const fmManual = value === 'auto' && md && parseSkillMd(md).fm['disable-model-invocation'] === 'true';
+    log(`${name}: ${SHOWN[value]}${fmManual ? ' — note: its SKILL.md says disable-model-invocation, so it stays /name only' : ''}`);
   }
-  if (Object.keys(settings.skillOverrides).length === 0) delete settings.skillOverrides;
-  writeJson(USER_SETTINGS, settings);
 }
 
 function setPlugins(names, on) {
@@ -202,16 +199,21 @@ function remove({ names, project }) {
     log(`removed ${i.name} (${i.dir})`);
   }
   state.installed = state.installed.filter((i) => !gone.includes(i));
-  const leftover = [...new Set(gone.map((i) => i.name))].filter((n) => !state.installed.some((i) => i.name === n) && state.disabled.includes(n));
-  if (leftover.length) setSkills(leftover, true);
+  // A removed skill that was turned off leaves nothing behind in the baseline or settings.
+  const leftover = [...new Set(gone.map((i) => i.name))].filter((n) => !state.installed.some((i) => i.name === n) && modeOf(n) === 'off');
+  if (leftover.length) setSkills(leftover, 'inherit');
   saveState();
 }
 
-function toggle({ names }, on) {
-  if (!names.length) throw new Error(`usage: ${on ? 'on' : 'off'} <set|skill|plugin:<name>|all>...`);
+function toggle({ names }, value) {
+  const cmd = { auto: 'on', off: 'off', manual: 'manual' }[value];
+  if (!names.length) throw new Error(`usage: ${cmd} <set|skill${value === 'manual' ? '' : '|plugin:<name>'}|all>...`);
   const { skills, plugins } = toggleTargets(names);
-  if (skills.length) setSkills(skills, on);
-  if (plugins.length) setPlugins(plugins, on);
+  if (skills.length) setSkills(skills, value);
+  if (plugins.length) {
+    if (value === 'manual') log(`skip ${plugins.map((p) => `plugin:${p}`).join(', ')}: a plugin is either on or off`);
+    else setPlugins(plugins, value === 'auto');
+  }
   saveState();
   log('Start a new Claude Code session to use the change, and to compare token use fairly (/context, /cost).');
 }
@@ -222,11 +224,12 @@ function list() {
     for (const k of s.skills) {
       const inst = state.installed.filter((i) => i.name === k.name);
       const where = inst.map((i) => (i.dir.startsWith(fwd(USER_SKILLS)) ? 'user' : i.dir.replace(/\/\.claude\/skills\/.*$/, ''))).join(', ');
-      const mark = inst.length ? `[installed: ${where}${state.disabled.includes(k.name) ? ', off' : ''}]` : '';
+      const m = modeOf(k.name);
+      const mark = inst.length ? `[installed: ${where}${m === 'off' ? ', off' : m === 'manual' ? ', /name only' : ''}]` : '';
       log(`  ${k.name.padEnd(28)} ${k.repo}${mark ? '  ' + mark : ''}`);
     }
   }
-  log('\nadd <set|skill>... [--project <dir>]   off|on <set|skill|all>   status');
+  log('\nadd <set|skill>... [--project <dir>]   off|on|manual <set|skill|all>   status');
 }
 
 // ---------- status: estimated skill listing cost ----------
@@ -270,11 +273,12 @@ try {
   if (command === 'list') list();
   else if (command === 'add') add(opts);
   else if (command === 'remove') remove(opts);
-  else if (command === 'off') toggle(opts, false);
-  else if (command === 'on') toggle(opts, true);
+  else if (command === 'off') toggle(opts, 'off');
+  else if (command === 'on') toggle(opts, 'auto');
+  else if (command === 'manual') toggle(opts, 'manual');
   else if (command === 'status') status(opts);
   else {
-    log('usage:\n  list\n  add <set|skill>... [--project <dir>] [--force]\n  remove <set|skill|all>... [--project <dir>]\n  off <set|skill|plugin:<name>|all>...\n  on  <set|skill|plugin:<name>|all>...\n  status [--project <dir>]');
+    log('usage:\n  list\n  add <set|skill>... [--project <dir>] [--force]\n  remove <set|skill|all>... [--project <dir>]\n  off <set|skill|plugin:<name>|all>...\n  on  <set|skill|plugin:<name>|all>...\n  manual <set|skill|all>...\n  status [--project <dir>]');
     process.exitCode = 1;
   }
 } catch (e) {

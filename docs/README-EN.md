@@ -46,9 +46,9 @@ and `docs/ROADMAP.md`, then commit.
 | Superpowers and Codex plugins (user scope) | `claude plugin install` |
 | Skill policy script and policy file | `~/.claude/skill-policy/` |
 | Skill-set manager and catalog (`skill-sets.mjs`, `skill-sets.json`) | `~/.claude/skill-policy/` |
-| Skill stats and dashboard (`skill-stats.mjs`, `skill-agents.mjs`, `skill-inventory.mjs`, `skill-dashboard.html`, `skill-meta.json`) | `~/.claude/skill-policy/` |
+| Skill stats and dashboard (`skill-stats.mjs`, `skill-agents.mjs`, `skill-inventory.mjs`, `skill-modes.mjs`, `skill-dashboard.html`, `skill-meta.json`) | `~/.claude/skill-policy/` |
 | `skill-sets` skill, so you can ask Claude to install or toggle sets | `~/.claude/skills/skill-sets/` |
-| `skillOverrides` (manual-only or off for skills named in the policy) | `~/.claude/settings.json` |
+| `skillOverrides` (manual-only or off for skills named in your baseline) | `~/.claude/settings.json` |
 | Policy check hook at session start | `~/.claude/settings.json` |
 
 The Superpowers `using-superpowers` bootstrap (injected in full every session) is removed. The other
@@ -74,23 +74,26 @@ Options: `--expo` (expo plugin), `--frontend` (frontend-design plugin), `--gitla
 
 ## How the skill policy applies to skills you already have
 
-In one line: **the policy never installs skills. If a skill named in `policy.json` exists on this PC,
-the policy only changes how that skill behaves.** Skills not named there are left alone.
+In one line: **the policy never installs skills. If a skill named in your baseline (`policy.json`) exists on
+this PC, the policy only changes how that skill behaves.** Skills not named there are left alone.
 
-The policy is written to `skillOverrides` in `~/.claude/settings.json` as `"skill name": "state"`.
-Claude Code applies it to **any skill with that name**, wherever it lives (`~/.claude/skills/` or a
-project's `.claude/skills/`). It does not apply to plugin skills (names like `superpowers:brainstorming`).
+The baseline lives in `modes` of `~/.claude/skill-policy/policy.json`, per agent, as `"skill name": "value"`.
+For Claude Code it is applied as `skillOverrides` in `~/.claude/settings.json` (the actual value). Claude Code
+applies that to **any skill with that name**, wherever it lives (`~/.claude/skills/` or a project's
+`.claude/skills/`). It does not apply to plugin skills (names like `superpowers:brainstorming`).
 
-| Policy list | Setting | Effect |
+| Baseline | Setting (Claude Code) | Effect |
 | --- | --- | --- |
-| `manualSkills` | `user-invocable-only` | Claude won't invoke it on its own; runs only via `/name`. Its description leaves the context, saving tokens |
-| `offSkills` | `off` | Fully hidden. If it is reinstalled in `~/.claude/skills/`, the folder is deleted (after asking at session start) |
-| `localOnlySkills` | folder move + `disable-model-invocation` | Removed globally, kept only in the listed projects |
-| (not listed) | none | Unchanged; invoked automatically |
+| `manual` | `user-invocable-only` | Claude won't invoke it on its own; runs only via `/name`. Its description leaves the context, saving tokens |
+| `off` | `off` | Fully hidden. The folder stays |
+| `auto` | none | Invoked automatically. If an upgrade turns it off, you are told |
+| (not in the baseline) | as it is | Left alone (unmanaged) |
+| `removeIfReinstalled` list | – | If it is reinstalled in `~/.claude/skills/`, the folder is deleted (after asking at session start) |
+| `localOnlySkills` list | folder move + `disable-model-invocation` | Removed globally, kept only in the listed projects |
 
 ### Examples
 
-The default `policy.json` lists gstack skill names (`review`, `qa`, `ship`, …) under `manualSkills`.
+The default baseline sets gstack skill names (`review`, `qa`, `ship`, …) to `manual`.
 
 1. **A teammate without gstack.** Only the line `"review": "user-invocable-only"` is added to
    `settings.json`. There is no skill named `review`, so nothing happens. That is what "not installed,
@@ -99,14 +102,15 @@ The default `policy.json` lists gstack skill names (`review`, `qa`, `ship`, …)
    effect. Saying "review this" won't make Claude call gstack `review`; you have to type `/review`.
    If a later gstack upgrade removes the setting, Claude asks "restore it?" at the next session start.
 3. **Your own personal skill `~/.claude/skills/my-notes/`.** Not listed, so nothing changes; it is still
-   invoked automatically. To make it manual-only, add `"my-notes"` to `manualSkills` and run `--apply`.
+   invoked automatically. To make it manual-only, pick that on the dashboard's Invocation page, or run
+   `node setup.mjs skills manual my-notes`.
 4. **Project skill `.claude/skills/grill-me/`** (added by this template). Not listed, so nothing changes.
    It is manual-only anyway, because its own `SKILL.md` has `disable-model-invocation: true`.
-5. **A project skill with a clashing name.** If the team repo has `.claude/skills/review/`, your PC's
-   policy applies to it too, making it `/review`-only **for you**. Teammates are unaffected. If you don't
-   want that, remove `review` from `manualSkills` or rename the project skill. (If the same name also
+5. **A project skill with a clashing name.** If the team repo has `.claude/skills/review/`, your PC's global
+   baseline applies to it too, making it `/review`-only **for you**. Teammates are unaffected. If you don't
+   want that, add an only-me exception for that project on the Invocation page, or rename the project skill. (If the same name also
    exists in `~/.claude/skills/`, the personal one wins and the project one is shadowed.)
-6. **`autoplan` in `offSkills`.** A project skill with that name is only hidden; its files stay.
+6. **`autoplan`** (baseline `off`, also in `removeIfReinstalled`). A project skill with that name is only hidden; its files stay.
    `~/.claude/skills/autoplan/` is deleted each time it comes back.
 7. **`browseros-neo` in `localOnlySkills`.** `node setup.mjs user --local-project ../blog` moves
    `~/.claude/skills/browseros-neo/` into `../blog/.claude/skills/`, makes it manual-only, and adds it to
@@ -116,24 +120,38 @@ To see the current state of every skill on this PC: `node setup.mjs skills statu
 
 ### Changing the policy
 
-Edit `~/.claude/skill-policy/policy.json`, then:
+The easiest place is the dashboard's **Invocation** page (`node setup.mjs dashboard`, below). Pick each
+agent's global values and project exceptions, check the files that change in the preview, then apply. It
+changes your baseline and each agent's settings file together, so they never drift apart. From the command
+line (Claude Code, global):
 
 ```bash
-node ~/.claude/skill-policy/skill-policy.mjs --apply   # apply
-node setup.mjs check                                   # show only what differs
+node setup.mjs skills manual review qa     # manual only
+node setup.mjs skills off docx             # off
+node setup.mjs skills on docx              # auto
+node setup.mjs check                       # show only what differs from the baseline
 ```
+
+If you edit `policy.json` by hand, apply it with `node ~/.claude/skill-policy/skill-policy.mjs --apply`.
 
 | Key | Meaning |
 | --- | --- |
-| `offSkills` | Fully off (`skillOverrides: off`; deleted if reinstalled in `~/.claude/skills`) |
-| `manualSkills` | Manual-only (invoked only via `/name`) |
+| `modes.<agent>.global` | Global defaults: `{ "skill name": "auto" \| "manual" \| "off" }`. `"path:<skill folder>"` addresses one copy |
+| `modes.<agent>.projects["<dir>"]` | Only-me project exceptions (this PC). Team exceptions go straight into the repo's settings file, not here |
+| `removeIfReinstalled` | Skills whose folder is deleted again if reinstalled in `~/.claude/skills` |
 | `localOnlySkills`, `localSkillProjects` | Keep personal skills only in the listed projects |
 | `stripSuperpowersBootstrap` | Remove the per-session using-superpowers injection |
 | `userPlugins` | Plugins to enable or disable at user scope |
 | `projectPluginRemovals` | Plugins to remove from specific project settings (`{"<settings.json path>": ["id"]}`) |
 
-When a gstack upgrade, plugin update, `npx skills` update, or BrowserOS reverts the settings, the hook
-notices at the next session start and Claude asks before restoring them. Nothing is fixed silently.
+Agent keys are `claude`, `codebuddy`, `qwen`, `codex`, and `zcode`. The old format (`manualSkills`,
+`offSkills`, and `disabled` in `state.json`) is moved over on first read; the original stays as
+`policy.v1.json`.
+
+When a gstack upgrade, plugin update, `npx skills` update, BrowserOS, or an agent's `/skills` screen changes
+the settings, the hook notices at the next session start and Claude asks first. Nothing is fixed silently.
+Depending on the answer it runs `--apply` (back to the baseline) or `--adopt` (keep the current values as the
+new baseline).
 
 ## Skill sets: install by category
 
@@ -177,13 +195,13 @@ node setup.mjs skills off documents        # turn a set off
 node setup.mjs skills off review qa        # any skill by name (gstack skills too)
 node setup.mjs skills off all              # every installed set
 node setup.mjs skills off plugin:superpowers
-node setup.mjs skills on all               # back on (policy manual/off entries are kept)
+node setup.mjs skills on all               # back on (auto)
+node setup.mjs skills manual review        # manual only (/name)
 node setup.mjs skills status               # per-skill state and estimated tokens
 ```
 
-Skills turned off with `off` are recorded in `~/.claude/skill-policy/state.json`, so the session-start
-check won't treat them as drift and turn them back. `on` returns them to the policy value (manual-only if
-listed in `manualSkills`).
+`on`, `off`, and `manual` change the baseline (`policy.json`) and `settings.json` together, so the
+session-start check won't treat them as drift. A manual-only skill becomes auto with `on`.
 
 ### Comparison steps (e.g. is the `documents` set worth it?)
 
@@ -216,14 +234,17 @@ node setup.mjs stats --exact          # exact Claude Code skill tokens via the c
 node ~/.claude/skill-policy/skill-stats.mjs serve   # from the installed copy, without this repo
 ```
 
-Two pages, switched from the top menu. Pick the language (한국어, English, 简体中文) at the top right; the
+Three pages, switched from the top menu. Pick the language (한국어, English, 简体中文) at the top right; the
 language and theme are remembered in the browser.
 
-- **Overview**: choose a coding agent at the top (All, Claude Code, Codex, Gemini CLI, GitHub Copilot CLI).
+- **Overview**: choose a coding agent at the top (All, and whichever of Claude Code, Codex, CodeBuddy Code,
+  Qwen Code, Gemini CLI, GitHub Copilot CLI this PC has).
   It shows summary numbers, a per-agent comparison (skill list sent with every request, skill calls in 30
   days, requests and input tokens, the skill list's share of input, duplicates), each agent's skill list as a
   bar, calls or token usage over the last 30 days stacked by agent, the most used skills, and every skill
   grouped by category, by source, or as one flat list. Clicking a row in the comparison also picks that agent.
+  Clicking a skill's invocation opens it on the Invocation page.
+- **Invocation**: change how each agent invokes each skill (auto, manual only, off). See below.
 - **Guide & concepts**: diagrams and tables on how a skill gets called, the two ways skills cost tokens,
   invocation modes, where skills live and which wins, where the numbers come from, how each coding agent is
   collected, and where the API key goes for exact counts, plus a glossary and cleanup recipes. Each `?` button
@@ -254,6 +275,42 @@ shape as `kit/user/skill-meta.json` and wins over it.
 { "origins": { "my-notes": "https://github.com/me/notes-skill" }, "categories": { "my-notes": "research" } }
 ```
 
+### The Invocation page
+
+Every skill has a **baseline** (what you decided, `policy.json`) and an **actual value** (what each agent reads
+from its own settings file). This page changes both together.
+
+- **By agent**: change the global value with the segmented control on each row. Add project exceptions from a
+  row's chips or "+ Project exception", kept either "only me" (this PC, `settings.local.json`) or "team" (the
+  repo's `settings.json`; teammates get it once you commit). Pick one project under "Editing" to see and change
+  the whole list as that project sees it.
+- **By skill · all agents**: change one skill in every agent at once. When the selection includes agents whose
+  settings cannot hold manual only (Codex, Qwen Code, ZCode), choose "skip them" or "turn off instead".
+- **Bulk**: tick rows, Shift+click for a range. Suggestions add "cleanup candidates → manual only" and "turn off
+  extra copies" in one click.
+- **Apply together**: changes collect in the change list; the preview shows each file before and after. Applying
+  backs up every file it changes into `~/.claude/skill-policy/backups/` first, and if one file fails, the ones
+  already written are put back. "Undo" reverts the last apply (refused if a file changed again since).
+- **Differs from baseline**: settings changed outside (an upgrade, a `/skills` screen) get a red outline, with
+  "revert to baseline" and "keep current value". Skills not in the baseline only show their actual value.
+- **Locked**: plugin skills (a plugin is on or off as a whole), skills whose SKILL.md makes them manual only (no
+  auto), values fixed by managed settings, Qwen's `skills.disabled`, and Kimi Code (no settings) cannot change,
+  and the page says why.
+
+| Agent | Global | Project · team | Project · only me | Values |
+| --- | --- | --- | --- | --- |
+| Claude Code | `~/.claude/settings.json` `skillOverrides` | `.claude/settings.json` | `.claude/settings.local.json` | auto · manual only · off |
+| CodeBuddy Code | `~/.codebuddy/settings.json` | `.codebuddy/settings.json` | `.codebuddy/settings.local.json` | same |
+| Qwen Code | `~/.qwen/settings.json` `skills.defaultDisabled` | `.qwen/settings.json` (`enabled`, `defaultDisabled`) | none | auto · off |
+| Codex | `~/.codex/config.toml` `[[skills.config]]` (per path) | after a test | none | auto · off |
+| ZCode | `~/.zcode/cli/config.json` (per path) | `.zcode/config.json` | none | auto · off |
+| Kimi Code | none (view only) | – | – | – |
+
+Only this page can change settings: the server puts a random token made at start-up into the page and accepts
+only requests with that token, a `localhost` Host, and a JSON body. The server decides which files to write.
+New only-me files are added to `.git/info/exclude`. The design and research notes are in
+[docs/design/skill-modes.md](design/skill-modes.md) (Korean).
+
 ### How each coding agent is collected
 
 There is nothing to switch on. The collector reads the logs of every agent it finds on this PC; use an agent
@@ -263,6 +320,9 @@ once and it appears on the next collection.
 | --- | --- | --- | --- |
 | Claude Code | `~/.claude/projects/**/*.jsonl` | Skill tool calls; the SKILL.md body injected after `/name` | worked out from settings (`skillOverrides`) and SKILL.md |
 | Codex | `$CODEX_HOME/sessions/**/*.jsonl`, `archived_sessions` (default `~/.codex`) | shell reads of a SKILL.md, an injected `<skill>`, `$name` in your message (once per turn) | the `<skills_instructions>` list the last session actually sent |
+| CodeBuddy Code | `~/.codebuddy/projects/**/*.jsonl` (Claude Code format) | same as Claude Code | worked out from settings (`skillOverrides`) and SKILL.md |
+| Qwen Code | not read yet | – | estimated from `~/.qwen/skills` and the `skills.*` settings |
+| ZCode, Kimi Code (apps) | not read yet | – | estimated from the shared `~/.agents/skills` |
 | Gemini CLI | `~/.gemini/tmp/*/chats/session-*.json` | the `activate_skill` tool, `read_file` of a SKILL.md | estimated from `~/.gemini/skills`, `<project>/.gemini/skills` |
 | GitHub Copilot CLI (experimental) | `~/.copilot/session-state/**/*.jsonl` | a tool call named `skill`, a read of a SKILL.md | estimated from `~/.copilot/skills`, `<project>/.github/skills` |
 

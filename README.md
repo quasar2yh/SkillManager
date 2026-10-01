@@ -45,9 +45,9 @@ node setup.mjs skills add documents
 | Superpowers, Codex 플러그인 (사용자 범위) | `claude plugin install` |
 | 스킬 정책 스크립트와 정책 파일 | `~/.claude/skill-policy/` |
 | 스킬 세트 관리기와 카탈로그 (`skill-sets.mjs`, `skill-sets.json`) | `~/.claude/skill-policy/` |
-| 스킬 통계·대시보드 (`skill-stats.mjs`, `skill-agents.mjs`, `skill-inventory.mjs`, `skill-dashboard.html`, `skill-meta.json`) | `~/.claude/skill-policy/` |
+| 스킬 통계·대시보드 (`skill-stats.mjs`, `skill-agents.mjs`, `skill-inventory.mjs`, `skill-modes.mjs`, `skill-dashboard.html`, `skill-meta.json`) | `~/.claude/skill-policy/` |
 | Claude에게 말로 세트를 설치·토글하게 하는 `skill-sets` 스킬 | `~/.claude/skills/skill-sets/` |
-| `skillOverrides` (정책에 적힌 스킬을 명시 전용·끔으로) | `~/.claude/settings.json` |
+| `skillOverrides` (기준값에 적힌 스킬을 명시 전용·끔으로) | `~/.claude/settings.json` |
 | 세션 시작 시 정책 점검 훅 | `~/.claude/settings.json` |
 
 Superpowers의 `using-superpowers` 부트스트랩(매 세션 전문 주입)은 제거한다. 나머지 Superpowers
@@ -72,39 +72,42 @@ Superpowers의 `using-superpowers` 부트스트랩(매 세션 전문 주입)은 
 
 ## 스킬 정책은 기존 스킬에 어떻게 적용되나
 
-핵심은 한 줄이다. **정책은 스킬을 설치하지 않는다. `policy.json`에 이름이 적힌 스킬이 이 PC에
+핵심은 한 줄이다. **정책은 스킬을 설치하지 않는다. 기준값(`policy.json`)에 이름이 적힌 스킬이 이 PC에
 있으면 그 스킬의 동작만 바꾼다.** 이름이 없는 스킬은 건드리지 않는다.
 
-정책은 `~/.claude/settings.json`의 `skillOverrides`에 `"스킬 이름": "상태"`로 들어간다. Claude Code는
-이 설정을 스킬이 어디 있든(`~/.claude/skills/`, 프로젝트 `.claude/skills/`) **이름이 같으면**
-적용한다. 단, 플러그인 스킬(`superpowers:brainstorming`처럼 `플러그인:스킬` 이름)에는 적용되지 않는다.
+기준값은 `~/.claude/skill-policy/policy.json`의 `modes`에 에이전트별로 `"스킬 이름": "값"`으로 들어간다.
+Claude Code에서는 `~/.claude/settings.json`의 `skillOverrides`로 옮겨 적용된다(적용값). Claude Code는 이
+설정을 스킬이 어디 있든(`~/.claude/skills/`, 프로젝트 `.claude/skills/`) **이름이 같으면** 적용한다.
+단, 플러그인 스킬(`superpowers:brainstorming`처럼 `플러그인:스킬` 이름)에는 적용되지 않는다.
 
-| 정책 목록 | 설정값 | 결과 |
+| 기준값 | 설정값 (Claude Code) | 결과 |
 | --- | --- | --- |
-| `manualSkills` | `user-invocable-only` | Claude가 알아서 부르지 않는다. `/이름`으로만 실행. 설명도 컨텍스트에서 빠져 토큰이 줄어든다 |
-| `offSkills` | `off` | 완전히 숨긴다. `~/.claude/skills/`에 다시 설치되면 폴더도 지운다 (세션 시작 때 물어본 뒤) |
-| `localOnlySkills` | 폴더 이동 + `disable-model-invocation` | 전역에서 빼고 지정한 프로젝트에만 둔다 |
-| (목록에 없음) | 없음 | 그대로. 자동 호출됨 |
+| `manual` | `user-invocable-only` | Claude가 알아서 부르지 않는다. `/이름`으로만 실행. 설명도 컨텍스트에서 빠져 토큰이 줄어든다 |
+| `off` | `off` | 완전히 숨긴다. 폴더는 남는다 |
+| `auto` | 없음 | 자동 호출. 업그레이드가 끄면 차이로 알려 준다 |
+| (기준값에 없음) | 그대로 | 건드리지 않는다 (관리 안 함) |
+| `removeIfReinstalled` 목록 | – | `~/.claude/skills/`에 다시 설치되면 폴더도 지운다 (세션 시작 때 물어본 뒤) |
+| `localOnlySkills` 목록 | 폴더 이동 + `disable-model-invocation` | 전역에서 빼고 지정한 프로젝트에만 둔다 |
 
 ### 예시
 
-기본 `policy.json`의 `manualSkills`에는 gstack 스킬 이름(`review`, `qa`, `ship` …)이 들어 있다.
+기본 기준값에는 gstack 스킬 이름(`review`, `qa`, `ship` …)이 `manual`로 들어 있다.
 
 1. **gstack을 설치하지 않은 팀원.** `settings.json`에 `"review": "user-invocable-only"` 줄만 생긴다.
    `review`라는 스킬이 없으니 아무 일도 일어나지 않는다. 설치를 강요하지 않는다는 뜻이 이것이다.
 2. **gstack을 설치한 사람.** `~/.claude/skills/review/`가 생기면 곧바로 위 설정이 걸린다. "리뷰해줘"라고
    해도 Claude가 gstack `review`를 자동으로 부르지 않고, `/review`라고 쳐야 실행된다.
    나중에 gstack 업그레이드가 설정을 지우면, 다음 세션 시작 때 Claude가 "되돌릴까요?"라고 묻는다.
-3. **내가 만든 개인 스킬 `~/.claude/skills/my-notes/`.** 정책 목록에 없으니 변화 없음. 계속 자동 호출된다.
-   명시 전용으로 바꾸려면 `manualSkills`에 `"my-notes"`를 넣고 `--apply` 한다.
-4. **프로젝트 스킬 `.claude/skills/grill-me/`** (이 템플릿이 넣는 것). 정책 목록에 없으니 변화 없음.
+3. **내가 만든 개인 스킬 `~/.claude/skills/my-notes/`.** 기준값에 없으니 변화 없음. 계속 자동 호출된다.
+   명시 전용으로 바꾸려면 대시보드 호출 방식 페이지에서 고르거나 `node setup.mjs skills manual my-notes`.
+4. **프로젝트 스킬 `.claude/skills/grill-me/`** (이 템플릿이 넣는 것). 기준값에 없으니 변화 없음.
    이 스킬은 자기 `SKILL.md`에 `disable-model-invocation: true`가 있어 원래 명시 전용이다.
-5. **이름이 겹치는 프로젝트 스킬.** 팀 저장소에 `.claude/skills/review/`가 있으면, 내 PC의 정책이
-   이 스킬에도 걸려 **나에게만** `/review` 전용이 된다. 팀원 PC에는 영향이 없다. 원치 않으면
-   `manualSkills`에서 `review`를 빼거나 프로젝트 스킬 이름을 바꾼다. (같은 이름이
+5. **이름이 겹치는 프로젝트 스킬.** 팀 저장소에 `.claude/skills/review/`가 있으면, 내 PC의 전역 기준값이
+   이 스킬에도 걸려 **나에게만** `/review` 전용이 된다. 팀원 PC에는 영향이 없다. 원치 않으면 호출 방식
+   페이지에서 그 프로젝트에 "나만" 예외를 두거나 프로젝트 스킬 이름을 바꾼다. (같은 이름이
    `~/.claude/skills/`에도 있으면 개인 스킬이 이기고 프로젝트 스킬은 가려진다.)
-6. **`offSkills`의 `autoplan`.** 프로젝트에 같은 이름이 있으면 숨겨지기만 하고 파일은 남는다.
-   `~/.claude/skills/autoplan/`은 다시 생길 때마다 지운다.
+6. **`autoplan`** (기준값 `off`, `removeIfReinstalled`에도 있음). 프로젝트에 같은 이름이 있으면 숨겨지기만
+   하고 파일은 남는다. `~/.claude/skills/autoplan/`은 다시 생길 때마다 지운다.
 7. **`localOnlySkills`의 `browseros-neo`.** `node setup.mjs user --local-project ../blog`이면
    `~/.claude/skills/browseros-neo/`를 `../blog/.claude/skills/`로 옮기고 명시 전용으로 만든 뒤,
    `../blog/.git/info/exclude`에 넣어 팀 커밋에 섞이지 않게 한다. 다른 프로젝트에서는 보이지 않는다.
@@ -113,24 +116,35 @@ Superpowers의 `using-superpowers` 부트스트랩(매 세션 전문 주입)은 
 
 ### 정책 바꾸기
 
-`~/.claude/skill-policy/policy.json`을 고친 뒤:
+가장 쉬운 곳은 대시보드의 **호출 방식** 페이지다(`node setup.mjs dashboard`, 아래). 에이전트마다 전역
+값과 프로젝트 예외를 고르고, 미리보기로 바뀌는 파일을 확인한 뒤 적용한다. 기준값과 각 에이전트 설정 파일을
+함께 바꾸므로 둘이 어긋나지 않는다. 명령으로는 이렇게 한다(Claude Code 전역).
 
 ```bash
-node ~/.claude/skill-policy/skill-policy.mjs --apply   # 적용
-node setup.mjs check                                   # 어긋난 곳만 보기
+node setup.mjs skills manual review qa     # 명시 전용
+node setup.mjs skills off docx             # 끄기
+node setup.mjs skills on docx              # 자동
+node setup.mjs check                       # 기준값과 다른 곳만 보기
 ```
+
+`policy.json`을 손으로 고쳤으면 `node ~/.claude/skill-policy/skill-policy.mjs --apply`로 적용한다.
 
 | 키 | 뜻 |
 | --- | --- |
-| `offSkills` | 완전히 끈다 (`skillOverrides: off`, `~/.claude/skills`에 다시 설치돼도 지운다) |
-| `manualSkills` | 명시 전용 (`/이름`으로만 호출) |
+| `modes.<에이전트>.global` | 전역 기본값. `{ "스킬 이름": "auto" \| "manual" \| "off" }`. 사본 하나만 가리킬 때는 `"path:<스킬 폴더>"` |
+| `modes.<에이전트>.projects["<폴더>"]` | 프로젝트 예외 중 "나만"(이 PC). "팀 공유"는 저장소의 설정 파일에 바로 쓰고 여기에는 넣지 않는다 |
+| `removeIfReinstalled` | `~/.claude/skills`에 다시 설치되면 폴더를 지울 스킬 |
 | `localOnlySkills`, `localSkillProjects` | 개인 스킬을 지정한 프로젝트에만 둔다 |
 | `stripSuperpowersBootstrap` | 매 세션 주입되는 using-superpowers를 뺀다 |
 | `userPlugins` | 사용자 범위에서 켤·끌 플러그인 |
 | `projectPluginRemovals` | 특정 프로젝트 설정에서 빼야 할 플러그인 (`{"<settings.json 경로>": ["id"]}`) |
 
-gstack 업그레이드, 플러그인 업데이트, `npx skills` 업데이트, BrowserOS가 설정을 되돌리면 다음 세션
-시작 때 훅이 감지하고, Claude가 되돌릴지 먼저 묻는다. 자동으로 고치지 않는다.
+에이전트 키는 `claude`, `codebuddy`, `qwen`, `codex`, `zcode`다. 예전 형식(`manualSkills`, `offSkills`,
+`state.json`의 `disabled`)은 처음 읽을 때 자동으로 옮기고 원본을 `policy.v1.json`으로 남긴다.
+
+gstack 업그레이드, 플러그인 업데이트, `npx skills` 업데이트, BrowserOS, 에이전트의 `/skills` 화면이 설정을
+바꾸면 다음 세션 시작 때 훅이 감지하고, Claude가 먼저 묻는다. 자동으로 고치지 않는다. 답에 따라
+`--apply`(기준값대로 되돌리기) 또는 `--adopt`(지금 값을 기준값으로 가져오기)를 실행한다.
 
 ## 스킬 세트: 분야별로 골라 설치
 
@@ -174,12 +188,13 @@ node setup.mjs skills off documents        # 세트 끄기
 node setup.mjs skills off review qa        # 아무 스킬이나 이름으로 (gstack 스킬도 가능)
 node setup.mjs skills off all              # 설치한 세트 전부 끄기
 node setup.mjs skills off plugin:superpowers
-node setup.mjs skills on all               # 다시 켜기 (정책의 manual/off는 그대로 유지)
+node setup.mjs skills on all               # 다시 켜기 (자동)
+node setup.mjs skills manual review        # 명시 전용 (/이름으로만)
 node setup.mjs skills status               # 스킬별 상태와 예상 토큰
 ```
 
-`off`로 끈 스킬은 `~/.claude/skill-policy/state.json`에 기록되어, 세션 시작 점검 훅이 "정책과
-다르다"고 되돌리지 않는다. `on` 하면 정책 값(`manualSkills`면 명시 전용)으로 돌아간다.
+`on`·`off`·`manual`은 기준값(`policy.json`)과 `settings.json`을 함께 바꾸므로, 세션 시작 점검 훅이
+"기준값과 다르다"고 되돌리지 않는다. 명시 전용이던 스킬도 `on` 하면 자동이 된다.
 
 ### 비교 절차 (예: `documents` 세트가 값을 하는지)
 
@@ -212,13 +227,15 @@ node setup.mjs stats --exact          # Claude Code 스킬 토큰을 count_token
 node ~/.claude/skill-policy/skill-stats.mjs serve   # 템플릿 저장소 없이, 설치된 사본으로
 ```
 
-위쪽 메뉴로 두 페이지를 오가고, 오른쪽 위에서 언어(한국어·English·简体中文)를 고른다. 고른 언어와 테마는
+위쪽 메뉴로 세 페이지를 오가고, 오른쪽 위에서 언어(한국어·English·简体中文)를 고른다. 고른 언어와 테마는
 브라우저에 기억된다.
 
-- **현황판**: 위쪽에서 코딩 에이전트(전체, Claude Code, Codex, Gemini CLI, GitHub Copilot CLI)를 고른다.
-  요약 숫자, 에이전트별 비교(요청마다 싣는 스킬 목록, 30일 스킬 호출, 요청 수·입력 토큰, 입력 중 스킬 목록 비중,
-  중복 등록), 에이전트별 스킬 목록 막대, 최근 30일 호출·토큰 사용량(에이전트별로 쌓은 막대), 많이 쓴 스킬,
-  그리고 스킬 전부를 분류별·출처별·전체 목록으로 보여 준다. 비교표의 행을 눌러도 그 에이전트만 본다.
+- **현황판**: 위쪽에서 코딩 에이전트(전체, Claude Code, Codex, CodeBuddy Code, Qwen Code, Gemini CLI, GitHub
+  Copilot CLI 중 이 PC에 있는 것)를 고른다. 요약 숫자, 에이전트별 비교(요청마다 싣는 스킬 목록, 30일 스킬 호출,
+  요청 수·입력 토큰, 입력 중 스킬 목록 비중, 중복 등록), 에이전트별 스킬 목록 막대, 최근 30일 호출·토큰
+  사용량(에이전트별로 쌓은 막대), 많이 쓴 스킬, 그리고 스킬 전부를 분류별·출처별·전체 목록으로 보여 준다.
+  비교표의 행을 눌러도 그 에이전트만 본다. 스킬 행의 호출 방식을 누르면 호출 방식 페이지의 그 스킬로 간다.
+- **호출 방식**: 에이전트별로 스킬의 호출 방식(자동 · 명시 전용 · 꺼짐)을 바꾼다. 아래에 따로 설명한다.
 - **사용법·개념**: 스킬이 불리는 흐름, 토큰이 드는 두 가지 방식, 호출 방식, 스킬이 있는 곳과 우선순위,
   숫자가 만들어지는 과정, 코딩 에이전트별 수집 방법, 토큰 정확히 세기(API 키를 두는 곳)를 그림과 표로
   설명하고, 용어와 정리 방법을 정리했다. 현황판의 `?` 버튼에서 해당 설명으로 바로 간다.
@@ -246,6 +263,40 @@ node ~/.claude/skill-policy/skill-stats.mjs serve   # 템플릿 저장소 없이
 { "origins": { "my-notes": "https://github.com/me/notes-skill" }, "categories": { "my-notes": "research" } }
 ```
 
+### 호출 방식 페이지
+
+스킬마다 **기준값**(내가 정한 값, `policy.json`)과 **적용값**(각 에이전트가 실제로 읽는 설정 파일의 값)이
+있다. 이 페이지는 둘을 함께 바꾼다.
+
+- **에이전트별 보기**: 전역 값은 행의 선택 단추로 한 번에 바꾼다. 프로젝트 예외는 행의 칩이나 "+ 프로젝트
+  예외"로 두고, "나만"(이 PC, `settings.local.json`)과 "팀 공유"(저장소의 `settings.json`, 커밋해야 동료에게
+  감) 중 고른다. 위쪽 "편집 범위"에서 프로젝트 하나를 고르면 목록 전체를 그 프로젝트 기준으로 보고 고친다.
+- **스킬별 · 모든 에이전트 보기**: 한 스킬을 모든 에이전트에서 한 번에 바꾼다. 명시 전용을 설정으로 못 하는
+  에이전트(Codex, Qwen Code, ZCode)가 섞이면 "건너뜀 / 꺼짐으로" 중에 고른다.
+- **일괄 조작**: 행을 체크하고 Shift+클릭으로 범위를 고른다. 추천 단추로 "정리 후보 → 명시 전용",
+  "중복 사본 끄기"를 한 번에 넣는다.
+- **모아서 적용**: 바꾼 값은 변경 목록에 쌓이고, 미리보기에서 파일별 이전·이후를 본 뒤 적용한다. 적용하기 전에
+  바뀌는 파일을 `~/.claude/skill-policy/backups/`에 백업하고, 한 파일이라도 실패하면 이미 쓴 파일도 되돌린다.
+  마지막 적용은 "되돌리기"로 취소한다(그 뒤에 파일이 다시 바뀌었으면 거부한다).
+- **기준값과 다름**: 업그레이드나 `/skills` 화면처럼 밖에서 바뀐 설정을 빨간 테두리로 보여 주고, "기준값대로
+  되돌리기"와 "지금 값 채택"을 고른다. 기준값에 없는 스킬은 적용값만 보여 주고 건드리지 않는다.
+- **잠김**: 플러그인 스킬(플러그인 단위로만 켜고 끔), SKILL.md가 명시 전용인 스킬(자동 불가), 관리자 정책
+  (`managed-settings.json`)이 정한 값, Qwen의 `skills.disabled`, Kimi Code(설정 없음)는 고를 수 없고 이유를
+  보여 준다.
+
+| 에이전트 | 전역 | 프로젝트 · 팀 공유 | 프로젝트 · 나만 | 값 |
+| --- | --- | --- | --- | --- |
+| Claude Code | `~/.claude/settings.json` `skillOverrides` | `.claude/settings.json` | `.claude/settings.local.json` | 자동·명시 전용·꺼짐 |
+| CodeBuddy Code | `~/.codebuddy/settings.json` | `.codebuddy/settings.json` | `.codebuddy/settings.local.json` | 같음 |
+| Qwen Code | `~/.qwen/settings.json` `skills.defaultDisabled` | `.qwen/settings.json` (`enabled`·`defaultDisabled`) | 없음 | 자동·꺼짐 |
+| Codex | `~/.codex/config.toml` `[[skills.config]]` (경로별) | 시험 뒤에 켬 | 없음 | 자동·꺼짐 |
+| ZCode | `~/.zcode/cli/config.json` (경로별) | `.zcode/config.json` | 없음 | 자동·꺼짐 |
+| Kimi Code | 없음 (보기만) | – | – | – |
+
+설정을 바꾸는 요청은 이 페이지에서만 받는다. 서버는 켤 때 만든 임의 토큰을 페이지에 넣고, 그 토큰과
+`localhost` Host, JSON 본문이 있는 요청만 받는다. 쓸 파일 경로는 서버가 정한다. 새로 만든 "나만" 파일은
+`.git/info/exclude`에 넣는다. 설계와 조사 내용은 [docs/design/skill-modes.md](docs/design/skill-modes.md)에 있다.
+
 ### 코딩 에이전트별 수집
 
 따로 켤 것은 없다. 이 PC에서 찾은 에이전트의 기록을 모두 읽고, 에이전트를 한 번이라도 쓰면 다음 수집부터
@@ -255,6 +306,9 @@ node ~/.claude/skill-policy/skill-stats.mjs serve   # 템플릿 저장소 없이
 | --- | --- | --- | --- |
 | Claude Code | `~/.claude/projects/**/*.jsonl` | Skill 도구 호출, `/이름` 입력 뒤 SKILL.md 본문 주입 | 설정(`skillOverrides`)과 SKILL.md로 계산 |
 | Codex | `$CODEX_HOME/sessions/**/*.jsonl`, `archived_sessions` (기본 `~/.codex`) | 셸로 SKILL.md 읽기, `<skill>` 주입, 메시지의 `$이름` (한 턴에 한 번) | 마지막 세션이 실제로 보낸 `<skills_instructions>` 목록 |
+| CodeBuddy Code | `~/.codebuddy/projects/**/*.jsonl` (Claude Code 형식) | Claude Code와 같음 | 설정(`skillOverrides`)과 SKILL.md로 계산 |
+| Qwen Code | 아직 읽지 않음 | – | `~/.qwen/skills`와 `skills.*` 설정으로 추정 |
+| ZCode, Kimi Code (앱) | 아직 읽지 않음 | – | 공유 폴더 `~/.agents/skills`로 추정 |
 | Gemini CLI | `~/.gemini/tmp/*/chats/session-*.json` | `activate_skill` 도구, `read_file`로 SKILL.md 읽기 | `~/.gemini/skills`, `<프로젝트>/.gemini/skills`로 추정 |
 | GitHub Copilot CLI (실험적) | `~/.copilot/session-state/**/*.jsonl` | 이름이 `skill`인 도구 호출, SKILL.md 읽기 | `~/.copilot/skills`, `<프로젝트>/.github/skills`로 추정 |
 

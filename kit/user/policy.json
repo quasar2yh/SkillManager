@@ -1,15 +1,24 @@
 {
-  "$comment": "~/.claude/skill-policy/policy.json. setup.mjs creates this once and never overwrites it. Edit it here, then run: node ~/.claude/skill-policy/skill-policy.mjs --apply",
-  "offSkills": ["autoplan"],
-  "manualSkills": [
-    "cso", "qa", "qa-only", "retro", "codex", "benchmark", "canary", "devex-review", "health",
-    "office-hours", "plan-ceo-review", "plan-eng-review", "plan-design-review", "plan-devex-review",
-    "review", "ship", "land-and-deploy", "setup-deploy", "document-release", "investigate", "checkpoint", "learn",
-    "design-consultation", "design-html", "design-review", "design-shotgun",
-    "gstack", "connect-chrome", "open-gstack-browser", "pair-agent", "setup-browser-cookies", "gstack-upgrade",
-    "freeze", "unfreeze", "guard",
-    "html-wireframe", "html-prototype", "html-plan", "html-diagram", "design-artifact"
-  ],
+  "$comment": "Template for ~/.claude/skill-policy/policy.json (your baseline). setup.mjs copies it once and never overwrites it; after that, change it from the dashboard's Invocation page (node setup.mjs dashboard) or with `node setup.mjs skills on|off|manual <name>`. modes.<agent>.global and .projects[\"<dir>\"] (only-me exceptions) map a skill name, or \"path:<skill folder>\" for one copy, to auto | manual | off. removeIfReinstalled: skill folders deleted again when an upgrade brings them back.",
+  "version": 2,
+  "modes": {
+    "claude": {
+      "global": {
+        "autoplan": "off",
+        "cso": "manual", "qa": "manual", "qa-only": "manual", "retro": "manual", "codex": "manual", "benchmark": "manual",
+        "canary": "manual", "devex-review": "manual", "health": "manual", "office-hours": "manual",
+        "plan-ceo-review": "manual", "plan-eng-review": "manual", "plan-design-review": "manual", "plan-devex-review": "manual",
+        "review": "manual", "ship": "manual", "land-and-deploy": "manual", "setup-deploy": "manual", "document-release": "manual",
+        "investigate": "manual", "checkpoint": "manual", "learn": "manual",
+        "design-consultation": "manual", "design-html": "manual", "design-review": "manual", "design-shotgun": "manual",
+        "gstack": "manual", "connect-chrome": "manual", "open-gstack-browser": "manual", "pair-agent": "manual",
+        "setup-browser-cookies": "manual", "gstack-upgrade": "manual", "freeze": "manual", "unfreeze": "manual", "guard": "manual",
+        "html-wireframe": "manual", "html-prototype": "manual", "html-plan": "manual", "html-diagram": "manual", "design-artifact": "manual"
+      },
+      "projects": {}
+    }
+  },
+  "removeIfReinstalled": ["autoplan"],
   "localOnlySkills": ["browseros-neo", "neo-naver-blog"],
   "localSkillProjects": [],
   "stripSuperpowersBootstrap": true,

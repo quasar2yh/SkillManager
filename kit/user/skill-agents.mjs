@@ -12,10 +12,14 @@ import { HOME, CLAUDE, exists, fwd, estimateTokens } from './skill-inventory.mjs
 export const CODEX_HOME = process.env.CODEX_HOME ? path.resolve(process.env.CODEX_HOME) : path.join(HOME, '.codex');
 export const GEMINI_HOME = path.join(HOME, '.gemini');
 export const COPILOT_HOME = path.join(HOME, '.copilot');
-// `npx skills` and Codex share this folder.
+export const CODEBUDDY_HOME = path.join(HOME, '.codebuddy');
+export const QWEN_HOME = path.join(HOME, '.qwen');
+export const ZCODE_HOME = path.join(HOME, '.zcode');
+export const KIMI_HOME = path.join(HOME, '.kimi-code');
+// `npx skills` writes here, and Codex, Kimi Code, and ZCode all read it.
 export const AGENTS_SKILLS = path.join(HOME, '.agents', 'skills');
 // Bump when a scanner's output changes; stored files scanned by an older version are read again.
-export const SCAN_VERSION = 3;
+export const SCAN_VERSION = 4;
 
 // Local calendar day, so "today" and the 30-day window match the user's clock.
 export const dayKey = (t) => {
@@ -189,7 +193,14 @@ function scanCodex(file) {
     else return;
     measuring.add(ev);
   };
+  // The user's text of the current turn: a "$name" there makes an injected <skill> of that name a user call,
+  // even for skills Codex leaves out of its listing (disable-model-invocation).
+  let turnText = '';
+  let turnTextId = null;
   const mentions = (text, ts, turnId) => {
+    if (turnTextId !== turnId) turnText = '';
+    turnTextId = turnId;
+    turnText += `\n${text}`;
     const names = new Set([...text.matchAll(/\[\$([^\]\s]+)\]\(/g)].map((m) => m[1]));
     for (const m of text.matchAll(/(?:^|\s)\$([A-Za-z][\w.:-]*)/g)) if (known.has(m[1])) names.add(m[1]);
     for (const n of names) use(n, 'user', ts, turnId);
@@ -248,7 +259,8 @@ function scanCodex(file) {
         } else if (p.role === 'user' && text.startsWith('<skill>')) {
           const name = text.match(/<name>([^<]+)<\/name>/)?.[1]?.trim();
           const file = text.match(/<path>([^<]+)<\/path>/)?.[1]?.trim();
-          use(name, 'model', ts, turnOf(), { loadTokens: estimateTokens(text), ...(file ? { file: fwd(file) } : {}) });
+          const byUser = !!name && turnTextId === turnOf() && new RegExp(`\\$${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w:-])`).test(turnText);
+          use(name, byUser ? 'user' : 'model', ts, turnOf(), { loadTokens: estimateTokens(text), ...(file ? { file: fwd(file) } : {}) });
         } else if (p.role === 'user' && !text.startsWith('<') && !text.startsWith('# AGENTS.md')) mentions(text, ts, turnOf());
       }
     }
@@ -344,7 +356,7 @@ function scanGeneric(agent) {
 // ---------- registry ----------
 
 // `logs` is where transcripts are read from. `skillDirs` are the personal skill folders each agent loads
-// on its own; project folders are added per project in skill-stats.mjs.
+// on its own; project folders are added per project in skill-stats.mjs. `noLogs`: the transcripts are not read yet.
 export const AGENTS = [
   {
     id: 'claude', label: 'Claude Code', home: CLAUDE, logs: [path.join(CLAUDE, 'projects')],
@@ -355,6 +367,16 @@ export const AGENTS = [
     files: () => [...walkFiles(path.join(CODEX_HOME, 'sessions'), isJsonl), ...walkFiles(path.join(CODEX_HOME, 'archived_sessions'), isJsonl)],
     scan: scanCodex, projectSkills: ['.agents/skills'],
   },
+  // A Claude Code fork: the same transcript format, settings, and skill folders under .codebuddy.
+  {
+    id: 'codebuddy', label: 'CodeBuddy Code', home: CODEBUDDY_HOME, logs: [path.join(CODEBUDDY_HOME, 'projects')],
+    files: () => walkFiles(path.join(CODEBUDDY_HOME, 'projects'), isJsonl), scan: scanClaude,
+    skillDirs: [path.join(CODEBUDDY_HOME, 'skills')], projectSkills: ['.codebuddy/skills'],
+  },
+  {
+    id: 'qwen', label: 'Qwen Code', home: QWEN_HOME, logs: [path.join(QWEN_HOME, 'projects')], noLogs: true,
+    files: () => [], scan: null, skillDirs: [path.join(QWEN_HOME, 'skills')], projectSkills: ['.qwen/skills'],
+  },
   {
     id: 'gemini', label: 'Gemini CLI', home: GEMINI_HOME, logs: [path.join(GEMINI_HOME, 'tmp')],
     files: () => walkFiles(path.join(GEMINI_HOME, 'tmp'), (p) => /[\\/]chats[\\/]session-[^\\/]*\.json$/.test(p)),
@@ -364,5 +386,14 @@ export const AGENTS = [
     id: 'copilot', label: 'GitHub Copilot CLI', home: COPILOT_HOME, logs: [path.join(COPILOT_HOME, 'session-state')],
     files: () => walkFiles(path.join(COPILOT_HOME, 'session-state'), isJsonl),
     scan: scanGeneric('copilot'), skillDirs: [path.join(COPILOT_HOME, 'skills')], projectSkills: ['.github/skills'], experimental: true,
+  },
+  // Desktop apps. Both read the shared ~/.agents/skills folder; their session stores are not read yet.
+  {
+    id: 'zcode', label: 'ZCode', home: ZCODE_HOME, logs: [], noLogs: true,
+    files: () => [], scan: null, skillDirs: [AGENTS_SKILLS],
+  },
+  {
+    id: 'kimi', label: 'Kimi Code', home: KIMI_HOME, logs: [], noLogs: true,
+    files: () => [], scan: null, skillDirs: [AGENTS_SKILLS],
   },
 ];

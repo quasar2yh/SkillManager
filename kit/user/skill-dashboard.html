@@ -3,12 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The server puts a per-run token here; the Invocation page sends it with every settings request. -->
+<meta name="skill-dash-token" content="__SKILL_DASH_TOKEN__">
 <title>Skill dashboard</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect x='1' y='12' width='4' height='9' rx='1' fill='%23b35c08'/%3E%3Crect x='7' y='7' width='4' height='14' rx='1' fill='%23b35c08'/%3E%3Crect x='13' y='3' width='4' height='18' rx='1' fill='%230a766c'/%3E%3C/svg%3E">
 <style>
   /* ---------- tokens ---------- */
   /* Cost colors carry one meaning everywhere: amber = every request, teal = only when called.
-     Agent colors are a separate categorical set (validated for CVD, adjacent order claude→codex→gemini→copilot). */
+     Agent colors are a separate categorical set of four (validated for CVD, adjacent order claude→codex→codebuddy→qwen);
+     every other agent gets a two-letter badge, and charts fold them into "other". Names are always shown too. */
   :root {
     --paper: #f3f4f7; --surface: #ffffff; --raised: #f8f9fb; --ink: #14161b; --ink-2: #3a404c; --muted: #5b6270; --faint: #8a919e;
     --line: #e2e5ea; --line-2: #cfd4dc; --accent: #2f4bc0; --accent-soft: #e8ecfb;
@@ -16,8 +19,9 @@
     --onuse: #0a766c; --onuse-soft: #dbf1ed;
     --warn: #b8392d; --warn-soft: #fbe3df;
     --bar: #c8cdd6; --bar-2: #e4e7ec;
-    --ag-claude: #2a78d6; --ag-codex: #e87ba4; --ag-gemini: #4a3aa7; --ag-copilot: #008300;
+    --ag-claude: #2a78d6; --ag-codex: #e87ba4; --ag-codebuddy: #4a3aa7; --ag-qwen: #008300; --ag-other: #9aa1ad;
     --shadow: 0 1px 2px rgb(20 22 27 / .06), 0 8px 24px rgb(20 22 27 / .08);
+    --shadow-lg: 0 2px 6px rgb(20 22 27 / .08), 0 18px 48px rgb(20 22 27 / .16);
     --font: "Pretendard Variable", "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
     --mono: "JetBrains Mono", "Cascadia Mono", "D2Coding", Consolas, ui-monospace, monospace;
     --fs-xs: 12.5px; --fs-sm: 13.5px; --fs-base: 15px; --fs-md: 17px; --fs-lg: 21px; --fs-xl: 30px;
@@ -31,8 +35,9 @@
       --onuse: #3fc4b5; --onuse-soft: #12302c;
       --warn: #f47c70; --warn-soft: #3b1b18;
       --bar: #3a404b; --bar-2: #262b33;
-      --ag-claude: #3987e5; --ag-codex: #d55181; --ag-gemini: #9085e9; --ag-copilot: #008300;
+      --ag-claude: #3987e5; --ag-codex: #d55181; --ag-codebuddy: #9085e9; --ag-qwen: #008300; --ag-other: #5d6470;
       --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 10px 28px rgb(0 0 0 / .45);
+      --shadow-lg: 0 2px 6px rgb(0 0 0 / .5), 0 20px 50px rgb(0 0 0 / .6);
       color-scheme: dark;
     }
   }
@@ -43,8 +48,9 @@
     --onuse: #3fc4b5; --onuse-soft: #12302c;
     --warn: #f47c70; --warn-soft: #3b1b18;
     --bar: #3a404b; --bar-2: #262b33;
-    --ag-claude: #3987e5; --ag-codex: #d55181; --ag-gemini: #9085e9; --ag-copilot: #008300;
+    --ag-claude: #3987e5; --ag-codex: #d55181; --ag-codebuddy: #9085e9; --ag-qwen: #008300; --ag-other: #5d6470;
     --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 10px 28px rgb(0 0 0 / .45);
+    --shadow-lg: 0 2px 6px rgb(0 0 0 / .5), 0 20px 50px rgb(0 0 0 / .6);
     color-scheme: dark;
   }
 
@@ -454,6 +460,244 @@
   pre .c { color: var(--faint); }
   .copy { position: absolute; top: 8px; right: 8px; border: 1px solid var(--line-2); background: var(--surface); border-radius: 6px; padding: 2px 8px; font: 600 12px var(--font); color: var(--muted); }
   .copy:hover { color: var(--ink); }
+
+  /* ---------- agents without a color slot: a two-letter badge ---------- */
+  .amono { display: inline-grid; place-items: center; height: 16px; min-width: 20px; padding: 0 3px; border-radius: 4px; border: 1px solid var(--line-2); color: var(--muted); font: 700 9.5px/1 var(--mono); letter-spacing: 0; flex: none; }
+  .agent-card header .amono { height: 18px; }
+
+  /* ---------- invocation page ---------- */
+  /* The one new part is the mode control (.modeseg). Everything else reuses the overview's pieces. */
+  .viewbar { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; }
+  .viewbar .seg-ctl button { display: inline-flex; align-items: center; gap: 8px; }
+  .seg-ctl button .n { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+  .m-missing { color: var(--faint); font-size: var(--fs-xs); }
+  .pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+  .pill.accent { color: var(--accent); border-color: var(--accent); }
+  .stat-value { flex-wrap: wrap; }
+  .stat-value .from { font-family: var(--mono); color: var(--faint); font-size: var(--fs-md); text-decoration: line-through; text-decoration-thickness: 1px; }
+  .stat-value .delta { font-family: var(--mono); font-size: var(--fs-sm); font-weight: 650; }
+  .delta.down, .down { color: var(--onuse); }
+  .delta.up, .up { color: var(--always); }
+  .stat-actions { display: flex; gap: 6px 12px; flex-wrap: wrap; margin-top: 2px; }
+  .stat-value .num.dim { color: var(--faint); }
+
+  .work { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+  @media (max-width: 1100px) { .work { grid-template-columns: minmax(0, 1fr); } }
+  .agent-head { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+  .agent-head h2 .agent-tag { font-size: var(--fs-lg); font-weight: 700; color: var(--ink); gap: 10px; }
+  .agent-head h2 .adot { width: 12px; height: 12px; }
+  .caps { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--muted); font-size: var(--fs-sm); margin: 6px 0 14px; }
+  .caps b { color: var(--ink-2); font-weight: 650; }
+  .scopebar { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; align-items: center; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .scopebar label { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-2); }
+  .scopebar select { max-width: 100%; font-weight: 650; justify-self: start; }
+  .scopebar .scope-desc { grid-column: 2; font-size: var(--fs-xs); color: var(--muted); }
+  .scopebar .scope-desc code { font-size: 11.5px; }
+  .mnote { display: flex; gap: 8px 14px; align-items: center; flex-wrap: wrap; border-radius: 10px; padding: 10px 14px; font-size: var(--fs-sm); line-height: 1.55; margin-top: 10px; color: var(--ink-2); }
+  .mnote.warn { background: var(--warn-soft); color: var(--ink); }
+  .mnote.warn b { color: var(--warn); }
+  .mnote.ro { background: var(--raised); border: 1px solid var(--line); }
+  .mnote.team { background: var(--accent-soft); color: var(--ink); }
+  .mnote code { font-size: 11.5px; }
+  .mnote .acts { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  .recs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 0; }
+  .recs > span { font-size: var(--fs-xs); color: var(--muted); font-weight: 700; letter-spacing: .02em; }
+  .rec { border: 1px dashed var(--line-2); background: none; border-radius: 999px; padding: 5px 13px; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-2); display: inline-flex; gap: 8px; align-items: center; }
+  .rec:hover { border-color: var(--accent); color: var(--accent); }
+  .rec .rtok { font-family: var(--mono); color: var(--onuse); font-weight: 650; }
+  .m-toolbar { margin: 14px 0 6px; }
+  .m-toolbar .seg-ctl button { display: inline-flex; align-items: center; gap: 6px; }
+
+  /* the selection bar replaces the toolbar while rows are selected, and stays in view while scrolling */
+  .selbar { position: sticky; top: 70px; z-index: 6; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; background: var(--ink); color: var(--paper); border-radius: 10px; padding: 8px 10px 8px 14px; margin: 14px 0 6px; box-shadow: var(--shadow); }
+  .selbar b { font-weight: 700; }
+  .selbar .scope-note { font-size: var(--fs-xs); opacity: .8; }
+  .selbar .btns { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .selbar .btn { background: color-mix(in srgb, var(--paper) 10%, transparent); color: var(--paper); border-color: color-mix(in srgb, var(--paper) 25%, transparent); display: inline-flex; gap: 7px; align-items: center; }
+  .selbar .btn:hover:not(:disabled) { border-color: var(--paper); }
+  .selbar .fallback { display: flex; gap: 6px 12px; align-items: center; flex-wrap: wrap; font-size: var(--fs-xs); flex-basis: 100%; }
+  .selbar .fallback label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+  .selbar :focus-visible { outline-color: var(--paper); }
+
+  #m-main .group:first-of-type { border-top: 0; }
+  #m-main .group > summary { padding: 14px 2px 10px; gap: 6px 12px; }
+  .gsel { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; flex: none; }
+
+  /* one skill row */
+  .srow { display: grid; grid-template-columns: 22px minmax(0, 1.5fr) 74px minmax(260px, auto); gap: 6px 16px; align-items: center; padding: 12px 10px; border-top: 1px solid var(--line); border-radius: 8px; }
+  .srow:hover { background: var(--raised); }
+  .srow.sel { background: color-mix(in srgb, var(--accent-soft) 75%, var(--surface)); }
+  .srow > input { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+  .srow .sk-name { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; word-break: normal; }
+  .srow .sk-name .flag { margin: 0; }
+  .srow .sk-sum { -webkit-line-clamp: 1; margin-top: 2px; font-size: var(--fs-sm); max-width: none; }
+  .sk-meta { color: var(--faint); font-size: var(--fs-xs); margin-top: 3px; display: flex; gap: 2px 10px; flex-wrap: wrap; align-items: center; }
+  .sk-meta .path { font-family: var(--mono); word-break: break-all; }
+  .mtok { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 650; text-align: right; font-size: var(--fs-sm); }
+  .mtok.always { color: var(--always); }
+  .mtok.zero { color: var(--faint); font-weight: 400; }
+  .mtok small { display: block; font-family: var(--font); font-weight: 400; color: var(--faint); font-size: 11px; }
+  .srow .extras { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .flag.soft { color: var(--ink-2); background: var(--bar-2); }
+
+  /* the mode control: a radio group of segments */
+  .modeseg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 9px; padding: 2px; gap: 2px; background: var(--surface); justify-self: end; }
+  .modeseg button { border: 0; background: none; border-radius: 7px; padding: 5px 10px; font-size: var(--fs-sm); font-weight: 600; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .modeseg button:hover:not([aria-disabled="true"]) { color: var(--ink); background: var(--raised); }
+  .modeseg button[aria-checked="true"] { color: var(--ink); background: var(--raised); box-shadow: inset 0 0 0 1.5px var(--ink-2); }
+  .modeseg button[aria-checked="true"].inh { box-shadow: inset 0 0 0 1.5px var(--line-2); color: var(--ink-2); }
+  .modeseg button[aria-disabled="true"] { opacity: .38; cursor: not-allowed; }
+  .modeseg button .sub { font-size: 11px; color: var(--faint); font-weight: 500; }
+  .modeseg.pending { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .modeseg.drift { border-color: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
+  .modeseg.locked button[aria-checked="true"] { box-shadow: inset 0 0 0 1.5px var(--line-2); }
+  .modeseg .lock { font-size: 12px; padding: 0 4px 0 6px; align-self: center; }
+  .na { color: var(--faint); font-size: var(--fs-sm); justify-self: end; }
+
+  /* project exceptions */
+  .xchip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line-2); background: var(--surface); border-radius: 999px; padding: 2px 10px 2px 8px; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+  .xchip:hover { border-color: var(--ink-2); }
+  .xchip .layer { color: var(--faint); font-weight: 600; }
+  .xchip.team { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+  .xchip.team .layer { color: var(--accent); }
+  .xchip.pending { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .xchip.drift { border-color: var(--warn); }
+  .xchip.unmanaged { border-style: dashed; }
+  .xchip.dirty::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: 2px; }
+  .xadd { border: 1px dashed var(--line-2); background: none; border-radius: 999px; padding: 0 9px; font-size: 11.5px; font-weight: 650; color: var(--muted); line-height: 1.7; }
+  .xadd:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* by skill · all agents */
+  .xtable-wrap { overflow-x: auto; margin: 6px -4px 0; padding: 0 4px; }
+  table.xt { width: 100%; border-collapse: collapse; min-width: 760px; table-layout: auto; }
+  table.xt th { vertical-align: top; }
+  table.xt th .pill { margin-top: 4px; }
+  table.xt td { padding: 10px 12px; vertical-align: middle; }
+  table.xt td.first, table.xt th.first { min-width: 260px; position: sticky; left: 0; background: var(--surface); z-index: 1; }
+  table.xt tr:hover td { background: var(--raised); }
+  table.xt tr.sel td { background: color-mix(in srgb, var(--accent-soft) 75%, var(--surface)); }
+  .xname { display: flex; gap: 10px; align-items: flex-start; }
+  .xname .gsel { margin-top: 5px; }
+  .xname .sk-name { display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; word-break: normal; }
+  .xname .sk-sum { -webkit-line-clamp: 1; font-size: var(--fs-sm); }
+  .xcell { display: inline-flex; align-items: center; gap: 6px; border: 1.5px solid transparent; border-radius: 8px; padding: 4px 9px; background: none; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+  .xcell:hover { border-color: var(--line-2); }
+  .xcell.pending { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+  .xcell.drift { border-color: var(--warn); }
+  .xcell.locked { color: var(--faint); }
+  .xcell .copies { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+
+  /* change list: sticky on the right; a bottom sheet with a dock on narrow screens */
+  .cart { position: sticky; top: 84px; display: grid; gap: 12px; max-height: calc(100vh - 104px); overflow: auto; padding: 18px; }
+  .cart h2 { font-size: var(--fs-md); display: flex; align-items: center; gap: 8px; }
+  .cart h2 .n { font-family: var(--mono); font-size: var(--fs-sm); color: var(--paper); background: var(--ink); border-radius: 999px; padding: 0 8px; }
+  .cart .empty { color: var(--muted); font-size: var(--fs-sm); line-height: 1.6; padding: 4px 0 0; text-align: left; }
+  .tokdelta { display: grid; gap: 4px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--raised); }
+  .tokdelta > span { color: var(--muted); font-size: var(--fs-xs); font-weight: 700; }
+  .tokdelta div { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); }
+  .tokdelta .v { margin-left: auto; font-family: var(--mono); font-weight: 650; }
+  .tokdelta .v s { color: var(--faint); font-weight: 400; }
+  .cgroup { display: grid; gap: 4px; }
+  .cgroup > b { font-size: var(--fs-xs); color: var(--muted); margin-top: 2px; }
+  .citem { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 8px; align-items: center; padding: 7px 6px 7px 10px; border-radius: 8px; border: 1px solid var(--line); }
+  .citem .what { font-family: var(--mono); font-size: var(--fs-sm); font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .citem .where { font-size: var(--fs-xs); color: var(--muted); }
+  .citem .chg { font-size: var(--fs-xs); color: var(--ink-2); display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+  .citem .x { grid-row: 1 / span 3; grid-column: 2; border: 0; background: none; color: var(--faint); font-size: 16px; line-height: 1; padding: 4px 7px; border-radius: 6px; }
+  .citem .x:hover { color: var(--warn); background: var(--warn-soft); }
+  .cart-actions { display: flex; gap: 8px; }
+  .cart-actions .btn.primary { flex: 1; }
+  .cart-foot { font-size: var(--fs-xs); color: var(--muted); line-height: 1.55; }
+  .lastapply { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 10px; font-size: var(--fs-xs); color: var(--muted); }
+  .dock { display: none; }
+  @media (max-width: 1100px) {
+    .cart { display: none; }
+    .cart.open { display: grid; position: fixed; inset: auto 8px 72px 8px; z-index: 40; max-height: 65vh; box-shadow: var(--shadow-lg); }
+    .dock:not([hidden]) { display: flex; position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 41; background: var(--surface); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 8px 8px 8px 14px; gap: 10px; align-items: center; }
+    .dock .sum { font-size: var(--fs-sm); flex: 1; }
+    .dock .sum b { font-family: var(--mono); }
+    #page-modes { padding-bottom: 110px; }
+  }
+
+  /* exception and cross-agent menus */
+  #xpop { position: fixed; z-index: 50; width: min(350px, calc(100vw - 24px)); background: var(--surface); color: var(--ink); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 14px; display: grid; gap: 10px; overflow: auto; }
+  #xpop[hidden] { display: none; }
+  #xpop h4 { margin: 0; font-size: var(--fs-base); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #xpop h4 .mono { font-weight: 700; }
+  #xpop .field { display: grid; gap: 5px; }
+  #xpop .field > span { font-size: var(--fs-xs); font-weight: 700; color: var(--muted); }
+  #xpop .field .file { font-size: var(--fs-xs); color: var(--muted); font-weight: 400; }
+  #xpop .layers { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #xpop .layers label { position: relative; border: 1px solid var(--line-2); border-radius: 9px; padding: 7px 10px; font-size: var(--fs-sm); font-weight: 650; cursor: pointer; display: grid; gap: 1px; }
+  #xpop .layers label small { font-weight: 400; color: var(--muted); font-size: 11.5px; }
+  #xpop .layers label:has(input:checked) { border-color: var(--ink-2); background: var(--raised); }
+  #xpop .layers input { position: absolute; opacity: 0; pointer-events: none; }
+  #xpop .layers label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #xpop .opts { display: grid; gap: 2px; }
+  #xpop .opt { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 2px 8px; align-items: center; border: 0; background: none; border-radius: 8px; padding: 7px 8px; text-align: left; font-size: var(--fs-sm); font-weight: 600; }
+  #xpop .opt:hover:not(:disabled) { background: var(--raised); }
+  #xpop .opt[aria-checked="true"] { background: var(--raised); box-shadow: inset 0 0 0 1.5px var(--ink-2); }
+  #xpop .opt:disabled { cursor: not-allowed; color: var(--faint); }
+  #xpop .opt .why { grid-column: 2; font-size: var(--fs-xs); font-weight: 400; color: var(--faint); line-height: 1.45; }
+  #xpop .opt .hint { font-weight: 400; color: var(--faint); font-size: var(--fs-xs); }
+  #xpop .note { font-size: var(--fs-xs); color: var(--muted); line-height: 1.55; border-top: 1px solid var(--line); padding-top: 8px; }
+  #xpop .foot { display: flex; gap: 8px; justify-content: space-between; align-items: center; }
+
+  /* preview dialog */
+  dialog.mdlg { border: 1px solid var(--line-2); border-radius: 16px; padding: 0; width: min(800px, calc(100vw - 24px)); max-height: calc(100vh - 48px); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-lg); }
+  dialog.mdlg::backdrop { background: rgb(10 12 16 / .45); }
+  .dlg { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; max-height: calc(100vh - 50px); }
+  .dlg header { padding: 18px 22px 14px; border-bottom: 1px solid var(--line); display: grid; gap: 4px; }
+  .dlg header p { color: var(--muted); font-size: var(--fs-sm); }
+  .dlg .body { overflow: auto; padding: 16px 22px; display: grid; gap: 12px; align-content: start; }
+  .dlg footer { padding: 12px 22px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+  .dlg footer .hint { margin-right: auto; font-size: var(--fs-xs); color: var(--muted); max-width: 52ch; }
+  .dlg .err { border-radius: 10px; background: var(--warn-soft); color: var(--ink); padding: 10px 14px; font-size: var(--fs-sm); display: grid; gap: 4px; }
+  .dlg .err b { color: var(--warn); }
+  .ffile { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .ffile h3 { font-size: var(--fs-sm); padding: 9px 12px; background: var(--raised); border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .ffile h3 code { background: none; border: 0; padding: 0; font-size: 12.5px; word-break: break-all; }
+  .role { font-family: var(--font); font-size: 11.5px; font-weight: 700; border-radius: 999px; padding: 0 8px; line-height: 1.7; white-space: nowrap; }
+  .role.policy { color: var(--accent); background: var(--accent-soft); }
+  .role.mine { color: var(--ink-2); background: var(--bar-2); }
+  .role.team { color: var(--always); background: var(--always-soft); }
+  .ffile ul { list-style: none; margin: 0; padding: 6px 0; font-family: var(--mono); font-size: 12.5px; }
+  .ffile li { padding: 3px 12px; display: flex; gap: 4px 8px; flex-wrap: wrap; word-break: break-all; }
+  .ffile li .from { color: var(--warn); }
+  .ffile li .to { color: var(--onuse); }
+  .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--paper) 35%, transparent); border-top-color: var(--paper); display: inline-block; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #toast { position: fixed; left: 50%; top: 76px; transform: translateX(-50%); z-index: 70; background: var(--ink); color: var(--paper); border-radius: 10px; padding: 10px 14px; font-size: var(--fs-sm); display: flex; gap: 12px; align-items: center; box-shadow: var(--shadow-lg); max-width: calc(100vw - 24px); }
+  #toast[hidden] { display: none; }
+  #toast button { border: 0; background: none; color: inherit; font-weight: 700; padding: 0; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+  .skel { height: 58px; border-radius: 8px; background: linear-gradient(90deg, var(--raised), var(--bar-2), var(--raised)); background-size: 200% 100%; animation: sh 1.2s ease-in-out infinite; margin: 8px 0; }
+  @keyframes sh { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+  .empty-state { text-align: center; color: var(--muted); font-size: var(--fs-sm); padding: 28px 12px; display: grid; gap: 6px; justify-items: center; }
+  .empty-state b { color: var(--ink); font-size: var(--fs-base); }
+  /* overview: the invocation cell opens this page */
+  a.mode { text-decoration: none; }
+  a.mode:hover span { text-decoration: underline; text-underline-offset: 3px; }
+
+  /* Phones: the list is the point of this page, so the four cards shrink to a 2 × 2 of numbers. */
+  @media (max-width: 520px) {
+    #m-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    #m-summary .stat { padding: 12px 14px; }
+    #m-summary .stat-value .num { font-size: 24px; }
+    #m-summary .stat-note { display: none; }
+    #m-summary .stat-actions { flex-direction: column; gap: 4px; }
+  }
+  @media (max-width: 760px) {
+    .selbar { top: 8px; }
+    .srow { grid-template-columns: 22px minmax(0, 1fr) auto; }
+    .srow .modeseg { grid-column: 1 / -1; justify-self: stretch; }
+    .srow .modeseg button { flex: 1; justify-content: center; padding: 6px 4px; }
+    .srow .na { grid-column: 1 / -1; justify-self: start; }
+    .srow .extras { grid-column: 1 / -1; }
+    .scopebar { grid-template-columns: minmax(0, 1fr); }
+    .scopebar .scope-desc { grid-column: 1; }
+    #m-main .group > summary .facts { margin-left: 0; }
+    #toast { top: 12px; }
+  }
 </style>
 </head>
 <body>
@@ -465,6 +709,7 @@
     </div>
     <nav class="pages" data-i18n-attr="aria-label:nav.aria">
       <a href="#/board" data-page="board" data-i18n="nav.board"></a>
+      <a href="#/modes" data-page="modes" data-i18n="nav.modes"></a>
       <a href="#/guide" data-page="guide" data-i18n="nav.guide"></a>
     </nav>
     <div class="topbar-right">
@@ -580,6 +825,33 @@
   </section>
 </main>
 
+<!-- ======================= invocation ======================= -->
+<main id="page-modes" hidden>
+  <section class="viewbar" data-i18n-attr="aria-label:m.views.aria">
+    <div class="seg-ctl" id="m-views" role="group" data-i18n-attr="aria-label:m.views.aria">
+      <button data-v="agent" data-i18n="m.view.agent"></button>
+      <button data-v="skill" data-i18n="m.view.skill"></button>
+    </div>
+    <div class="seg-ctl" id="m-agents" role="group" data-i18n-attr="aria-label:agents.label"></div>
+    <span class="m-missing" id="m-missing"></span>
+  </section>
+  <section class="summary" id="m-summary" data-i18n-attr="aria-label:sum.aria"></section>
+  <div class="work">
+    <section class="panel" id="m-main" aria-live="polite"></section>
+    <aside class="panel cart" id="m-cart" data-i18n-attr="aria-label:m.cart"></aside>
+  </div>
+</main>
+<div class="dock" id="m-dock" hidden></div>
+<div id="xpop" role="dialog" hidden></div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+<dialog class="mdlg" id="m-dlg" aria-labelledby="m-dlg-t">
+  <div class="dlg">
+    <header><h2 id="m-dlg-t" data-i18n="m.dlg.title"></h2><p id="m-dlg-sub"></p></header>
+    <div class="body" id="m-dlg-body"></div>
+    <footer><span class="hint" id="m-dlg-hint"></span><button class="btn" id="m-dlg-cancel" data-i18n="m.dlg.cancel"></button><button class="btn primary" id="m-dlg-apply" data-i18n="m.dlg.apply"></button></footer>
+  </div>
+</dialog>
+
 <!-- ======================= guide ======================= -->
 <main id="page-guide" hidden>
   <div class="guide">
@@ -692,7 +964,7 @@
       <section id="g-modes">
         <span class="eyebrow" data-i18n="g.eyebrow.concept"></span>
         <h2 data-i18n="toc.modes"></h2>
-        <p data-i18n="g.modes.p"></p>
+        <p data-i18n-html="g.modes.p"></p>
         <figure>
           <div class="canvas">
             <table class="matrix">
@@ -807,8 +1079,25 @@
               <div><dt data-i18n="g.ag.note"></dt><dd data-i18n-html="g.ag.codex.note"></dd></div>
             </dl>
           </article>
-          <article class="agent-card" style="--c:var(--ag-gemini)">
-            <header><i class="adot"></i><h3>Gemini CLI</h3><span class="status" data-live="agent:gemini"></span></header>
+          <article class="agent-card" style="--c:var(--ag-codebuddy)">
+            <header><i class="adot"></i><h3>CodeBuddy Code</h3><span class="status" data-live="agent:codebuddy"></span></header>
+            <dl>
+              <div><dt data-i18n="g.ag.logs"></dt><dd data-i18n-html="g.ag.codebuddy.logs"></dd></div>
+              <div><dt data-i18n="g.ag.calls"></dt><dd data-i18n-html="g.ag.codebuddy.calls"></dd></div>
+              <div><dt data-i18n="g.ag.listing"></dt><dd data-i18n-html="g.ag.codebuddy.listing"></dd></div>
+              <div><dt data-i18n="g.ag.dirs"></dt><dd data-i18n-html="g.ag.codebuddy.dirs"></dd></div>
+            </dl>
+          </article>
+          <article class="agent-card" style="--c:var(--ag-qwen)">
+            <header><i class="adot"></i><h3>Qwen Code</h3><span class="status" data-live="agent:qwen"></span></header>
+            <dl>
+              <div><dt data-i18n="g.ag.logs"></dt><dd data-i18n-html="g.ag.qwen.logs"></dd></div>
+              <div><dt data-i18n="g.ag.listing"></dt><dd data-i18n-html="g.ag.qwen.listing"></dd></div>
+              <div><dt data-i18n="g.ag.dirs"></dt><dd data-i18n-html="g.ag.qwen.dirs"></dd></div>
+            </dl>
+          </article>
+          <article class="agent-card" style="--c:var(--line-2)">
+            <header><span class="amono" aria-hidden="true">GM</span><h3>Gemini CLI</h3><span class="status" data-live="agent:gemini"></span></header>
             <dl>
               <div><dt data-i18n="g.ag.logs"></dt><dd data-i18n-html="g.ag.gemini.logs"></dd></div>
               <div><dt data-i18n="g.ag.calls"></dt><dd data-i18n-html="g.ag.gemini.calls"></dd></div>
@@ -818,8 +1107,8 @@
               <div><dt data-i18n="g.ag.note"></dt><dd data-i18n-html="g.ag.gemini.note"></dd></div>
             </dl>
           </article>
-          <article class="agent-card" style="--c:var(--ag-copilot)">
-            <header><i class="adot"></i><h3>GitHub Copilot CLI</h3><span class="pill" data-i18n="ag.exp"></span><span class="status" data-live="agent:copilot"></span></header>
+          <article class="agent-card" style="--c:var(--line-2)">
+            <header><span class="amono" aria-hidden="true">CP</span><h3>GitHub Copilot CLI</h3><span class="pill" data-i18n="ag.exp"></span><span class="status" data-live="agent:copilot"></span></header>
             <dl>
               <div><dt data-i18n="g.ag.logs"></dt><dd data-i18n-html="g.ag.copilot.logs"></dd></div>
               <div><dt data-i18n="g.ag.calls"></dt><dd data-i18n-html="g.ag.copilot.calls"></dd></div>
@@ -827,6 +1116,14 @@
               <div><dt data-i18n="g.ag.listing"></dt><dd data-i18n-html="g.ag.copilot.listing"></dd></div>
               <div><dt data-i18n="g.ag.dirs"></dt><dd data-i18n-html="g.ag.copilot.dirs"></dd></div>
               <div><dt data-i18n="g.ag.note"></dt><dd data-i18n-html="g.ag.copilot.note"></dd></div>
+            </dl>
+          </article>
+          <article class="agent-card" style="--c:var(--line-2)">
+            <header><span class="amono" aria-hidden="true">ZC</span><span class="amono" aria-hidden="true">KM</span><h3 data-i18n="g.ag.apps"></h3><span class="status" data-live="agent:zcode"></span></header>
+            <dl>
+              <div><dt data-i18n="g.ag.logs"></dt><dd data-i18n-html="g.ag.apps.logs"></dd></div>
+              <div><dt data-i18n="g.ag.dirs"></dt><dd data-i18n-html="g.ag.apps.dirs"></dd></div>
+              <div><dt data-i18n="g.ag.note"></dt><dd data-i18n-html="g.ag.apps.note"></dd></div>
             </dl>
           </article>
         </div>
@@ -970,8 +1267,10 @@ const T = {
   'brand': ['스킬 대시보드', 'Skill dashboard', '技能仪表板'],
   'title.board': ['현황판 · 스킬 대시보드', 'Overview · Skill dashboard', '概览 · 技能仪表板'],
   'title.guide': ['사용법·개념 · 스킬 대시보드', 'Guide · Skill dashboard', '使用说明 · 技能仪表板'],
+  'title.modes': ['호출 방식 · 스킬 대시보드', 'Invocation · Skill dashboard', '调用方式 · 技能仪表板'],
   'nav.aria': ['페이지', 'Pages', '页面'],
   'nav.board': ['현황판', 'Overview', '概览'],
+  'nav.modes': ['호출 방식', 'Invocation', '调用方式'],
   'nav.guide': ['사용법·개념', 'Guide & concepts', '使用说明与概念'],
   'toc.aria': ['목차', 'Contents', '目录'],
   'btn.exact': ['토큰 정확히 세기', 'Count tokens exactly', '精确计算 token'],
@@ -1073,6 +1372,7 @@ const T = {
   'daily.lead.calls': ['하루에 스킬이 몇 번 불렸는지 에이전트별로 쌓았습니다. 모델이 스스로 부른 것과 사용자가 직접 부른 것을 합쳤습니다.', 'Skill calls per day, stacked by agent. Calls by the model and by you are added together.', '按智能体堆叠的每日技能调用次数，包括模型自行调用和用户直接调用。'],
   'daily.lead.tokens': ['하루에 쓴 입력과 출력 토큰을 에이전트별로 쌓았습니다. 입력에는 캐시에서 읽은 토큰도 들어 있습니다.', 'Input plus output tokens per day, stacked by agent. Input includes tokens read from cache.', '按智能体堆叠的每日输入与输出 token。输入包含从缓存读取的 token。'],
   'daily.total': ['합계', 'Total', '合计'],
+  'daily.other': ['기타', 'Other', '其他'],
   'daily.empty': ['최근 30일 기록이 없습니다', 'Nothing recorded in the last 30 days', '最近 30 天没有记录'],
   'daily.aria': ['최근 30일 일별 {what}, 합계 {n}', 'Daily {what} over the last 30 days, total {n}', '最近 30 天每日{what}，合计 {n}'],
 
@@ -1149,8 +1449,10 @@ const T = {
   'dd.dup': ['같은 이름이 목록에 두 번 이상 있어, 설명 토큰이 요청마다 그만큼 더 나갑니다.', 'The same name is listed more than once, so its description is paid for more than once on every request.', '同名技能在列表中出现不止一次，每次请求都会多次计入其描述 token。'],
   'dd.chart': ['최근 30일 호출', 'Calls in the last 30 days', '最近 30 天调用'],
   'dd.30ago': ['30일 전', '30 days ago', '30 天前'],
-  'policy.manual': ['policy.json의 manualSkills에 있어 /명시 전용으로 고정됩니다.', 'In manualSkills of policy.json, so it stays /manual only.', '位于 policy.json 的 manualSkills 中，固定为仅 / 手动。'],
-  'policy.off': ['policy.json의 offSkills에 있어 꺼짐으로 고정됩니다.', 'In offSkills of policy.json, so it stays off.', '位于 policy.json 的 offSkills 中，固定为关闭。'],
+  'policy.auto': ['기준값이 자동입니다. 업그레이드가 바꾸면 세션 시작 때 알려 줍니다.', 'Your baseline says auto; if an upgrade changes it, the next session start tells you.', '基准为自动；如果升级改变了它，下次会话开始时会提示。'],
+  'policy.manual': ['기준값이 /명시 전용입니다. 업그레이드가 바꾸면 세션 시작 때 알려 줍니다.', 'Your baseline says /manual only; if an upgrade changes it, the next session start tells you.', '基准为仅 / 手动；如果升级改变了它，下次会话开始时会提示。'],
+  'policy.off': ['기준값이 꺼짐입니다. 업그레이드가 바꾸면 세션 시작 때 알려 줍니다.', 'Your baseline says off; if an upgrade changes it, the next session start tells you.', '基准为关闭；如果升级改变了它，下次会话开始时会提示。'],
+  'policy.change': ['호출 방식 페이지에서 바꾸기 →', 'Change it on the Invocation page →', '在调用方式页面中修改 →'],
   'policy.local-only': ['policy.json의 localOnlySkills에 있어 지정한 프로젝트에만 둡니다.', 'In localOnlySkills of policy.json, so it lives only in the chosen projects.', '位于 policy.json 的 localOnlySkills 中，只保留在指定项目里。'],
 
   // where / origin
@@ -1244,6 +1546,212 @@ const T = {
   'i.agents.1': ['각 에이전트의 대화 기록에서 스킬 호출과, 요청마다 기록된 토큰 사용량(usage)을 모았습니다.', 'Skill calls and the per-request token usage are read from each agent’s transcripts.', '从各智能体的对话记录中收集技能调用和每次请求记录的 token 用量（usage）。'],
   'i.agents.2': ['에이전트마다 기록 위치와 세는 방법이 다릅니다.', 'Each agent keeps its logs in a different place and is counted slightly differently.', '各智能体的记录位置和统计方式略有不同。'],
 
+  // invocation page: views and agents
+  'm.views.aria': ['보기 방식', 'View', '视图'],
+  'm.view.agent': ['에이전트별', 'By agent', '按智能体'],
+  'm.view.skill': ['스킬별 · 모든 에이전트', 'By skill · all agents', '按技能 · 所有智能体'],
+  'm.missing': ['이 PC에서 찾지 못함: {list}', 'Not found on this PC: {list}', '本机未发现：{list}'],
+  'm.missing.tip': ['설치하고 한 번 실행하면 여기에 나타납니다.', 'Install it and run it once, and it shows up here.', '安装并运行一次后即会出现在这里。'],
+  'm.pill.ro': ['보기 전용', 'View only', '仅查看'],
+  'm.pill.pending': ['대기 {n}', '{n} pending', '待应用 {n}'],
+  'm.status.nologs': ['기록 없음', 'No history yet', '暂无记录'],
+  'm.status.nologs.tip': ['대화 기록이 아직 없습니다. 로그인하기 전이면 정상입니다. 설정은 로그인과 상관없이 바꿀 수 있고, 정리 후보는 기록이 쌓인 뒤에 계산합니다.', 'No transcripts yet, which is normal before you sign in. Settings can be changed either way; cleanup candidates need some history first.', '还没有对话记录，登录前属正常。无论是否登录都可以修改设置；待清理需要先积累记录。'],
+  'm.status.notread': ['기록 읽기 준비 중', 'History not read yet', '尚未读取记录'],
+  'm.status.notread.tip': ['이 에이전트의 호출 기록은 아직 모으지 않습니다. 설정은 바꿀 수 있고, 정리 후보는 계산하지 않습니다.', 'This agent’s call history is not collected yet. Settings can be changed; cleanup candidates are not worked out.', '尚未收集此智能体的调用记录。可以修改设置，但不会计算待清理。'],
+  'm.loading': ['설정 파일을 읽는 중…', 'Reading settings files…', '正在读取设置文件…'],
+  'm.fail': ['호출 방식을 불러오지 못했습니다: {msg}', 'Could not load invocation settings: {msg}', '无法加载调用方式：{msg}'],
+
+  // invocation page: values
+  'm.v.auto': ['자동', 'Auto', '自动'],
+  'm.v.manual': ['명시 전용', 'Manual only', '仅手动'],
+  'm.v.off': ['꺼짐', 'Off', '关闭'],
+  'm.v.inherit': ['따름', 'Inherit', '继承'],
+  'm.v.name-only': ['이름만', 'Name only', '仅名称'],
+
+  // invocation page: summary
+  'm.sum.fixed.agent': ['{a} · 모든 프로젝트 공통 목록', '{a} · the list shared by all projects', '{a} · 所有项目共用的列表'],
+  'm.sum.fixed.all': ['설정을 바꿀 수 있는 에이전트의 합', 'Sum over the agents you can change', '可修改设置的智能体合计'],
+  'm.sum.fixed.after': ['적용 뒤', 'after applying', '应用后'],
+  'm.sum.pending': ['적용 대기', 'Pending changes', '待应用'],
+  'm.sum.pending.some': ['파일 {n}개가 바뀝니다. 적용하기 전에는 아무것도 쓰지 않습니다.', plural('{n} file will change. Nothing is written until you apply.', '{n} files will change. Nothing is written until you apply.'), '将修改 {n} 个文件。应用前不会写入任何内容。'],
+  'm.sum.pending.none': ['바꾼 값은 변경 목록에 모였다가 한 번에 적용됩니다.', 'Changes collect in the change list and are applied together.', '修改会汇集到变更列表中，一次性应用。'],
+  'm.sum.drift': ['기준값과 다름', 'Differs from baseline', '与基准不同'],
+  'm.sum.drift.some': ['업그레이드나 에이전트의 /skills 화면처럼 대시보드 밖에서 바뀌었습니다.', 'Changed outside the dashboard, by an upgrade or an agent’s /skills screen.', '在仪表板之外被修改，例如升级或智能体的 /skills 界面。'],
+  'm.sum.drift.none': ['기준값과 실제 설정이 같습니다.', 'Every setting matches your baseline.', '所有设置都与基准一致。'],
+  'm.drift.view': ['하나씩 보기', 'Review each', '逐个查看'],
+  'm.drift.revert': ['모두 기준값대로', 'Revert all to baseline', '全部恢复为基准'],
+  'm.drift.adopt': ['모두 지금 값 채택', 'Keep all current values', '全部采用当前值'],
+  'm.sum.exc': ['프로젝트 예외', 'Project exceptions', '项目例外'],
+  'm.sum.exc.note': ['나만 {m} · 팀 공유 {t}', 'Only me {m} · team {t}', '仅自己 {m} · 团队共享 {t}'],
+  'm.sum.exc.dirty': ['커밋 안 된 팀 파일 {n}', plural('{n} team file not committed', '{n} team files not committed'), '未提交的团队文件 {n}'],
+  'unit.changes': ['건', 'changes', '项'],
+  'unit.count': ['개', '', '个'],
+  'i.baseline.t': ['기준값과 적용값', 'Baseline and actual value', '基准与实际值'],
+  'i.baseline.1': ['기준값은 내가 정한 값입니다(~/.claude/skill-policy/policy.json). 적용값은 각 에이전트가 실제로 읽는 설정 파일의 값입니다. 여기서 바꾸면 둘을 함께 바꿉니다.', 'The baseline is what you decided (~/.claude/skill-policy/policy.json). The actual value is what each agent reads from its own settings file. Changes made here update both together.', '基准是你决定的值（~/.claude/skill-policy/policy.json）。实际值是各智能体从自己的设置文件中读取的值。在这里修改会同时更新两者。'],
+  'i.baseline.2': ['둘이 다르면 대시보드 밖에서 바뀐 것입니다. 기준값대로 되돌리거나 지금 값을 기준값으로 가져올 수 있습니다. 세션 시작 점검도 같은 비교를 합니다.', 'When they differ, something outside the dashboard changed them. Revert to the baseline, or keep the current value as the new baseline. The session-start check compares the same way.', '两者不同说明在仪表板之外被修改。可以恢复为基准，或把当前值采纳为新的基准。会话开始时的检查也做同样的比较。'],
+
+  // invocation page: agent panel
+  'm.caps.values': ['고를 수 있는 값', 'Values', '可选值'],
+  'm.caps.both': ['프로젝트 예외: 나만 · 팀 공유', 'Project exceptions: only me · team', '项目例外：仅自己 · 团队共享'],
+  'm.caps.team': ['프로젝트 예외: 프로젝트 파일', 'Project exceptions: project file', '项目例外：项目文件'],
+  'm.caps.none': ['프로젝트 예외 없음', 'No project exceptions', '无项目例外'],
+  'm.caps.trial': ['프로젝트 예외: 시험 뒤에 켭니다', 'Project exceptions: after a test', '项目例外：测试后开启'],
+  'm.caps.name': ['이름 기준 (같은 이름의 사본 모두)', 'By name (every copy of that name)', '按名称（同名的所有副本）'],
+  'm.caps.path': ['경로 기준 (사본 하나씩)', 'By path (one copy at a time)', '按路径（逐个副本）'],
+  'm.caps.qwen': ['전역 꺼짐은 기본만 끕니다. 프로젝트에서 다시 켤 수 있습니다.', 'Global off only defaults it off; a project can turn it back on.', '全局关闭只是默认关闭，项目中可以重新开启。'],
+  'm.scope': ['편집 범위', 'Editing', '编辑范围'],
+  'm.scope.global': ['전역 기본값 (모든 프로젝트)', 'Global default (all projects)', '全局默认（所有项目）'],
+  'm.scope.mine': ['나만 (이 PC)', 'Only me (this PC)', '仅自己（本机）'],
+  'm.scope.team': ['팀 공유 (커밋)', 'Team (committed)', '团队共享（提交）'],
+  'm.scope.file': ['프로젝트 파일', 'Project file', '项目文件'],
+  'm.scope.desc.global': ['모든 프로젝트에 적용됩니다', 'Applies in every project', '适用于所有项目'],
+  'm.scope.desc.mine': ['이 PC의 {p}에만 적용되고, 팀 공유 값보다 우선합니다', 'Applies to {p} on this PC only, and wins over the team value', '仅在本机的 {p} 生效，并优先于团队共享值'],
+  'm.scope.desc.team': ['커밋하면 동료에게도 적용됩니다', 'Applies to teammates once committed', '提交后对同事也生效'],
+  'm.scope.desc.file': ['git에 올리면 팀과 공유됩니다', 'Shared with the team if you commit it', '提交到 git 后与团队共享'],
+  'm.sl.global': ['전역 기본값', 'Global default', '全局默认'],
+  'm.sl.mine': ['{p} · 나만', '{p} · only me', '{p} · 仅自己'],
+  'm.sl.team': ['{p} · 팀 공유', '{p} · team', '{p} · 团队共享'],
+  'm.sl.file': ['{p} · 프로젝트 파일', '{p} · project file', '{p} · 项目文件'],
+  'm.n.drift': ['<b>기준값과 다른 설정 {n}개</b> · 대시보드 밖에서 바뀌었습니다.', '<b>{n} settings differ from your baseline</b> · changed outside the dashboard.', '<b>{n} 项设置与基准不同</b> · 在仪表板之外被修改。'],
+  'm.n.team': ['<b>팀 공유 파일 {n}개</b>가 커밋되지 않았습니다. 커밋해야 동료에게 전달됩니다:', '<b>{n} team files</b> are not committed. Teammates get them once you commit:', '<b>{n} 个团队共享文件</b>尚未提交。提交后才会同步给同事：'],
+  'm.n.copyGit': ['git 명령 복사', 'Copy git commands', '复制 git 命令'],
+  'm.n.trial': ['Codex의 프로젝트 예외(<code>&lt;프로젝트&gt;/.codex/config.toml</code>)는 Codex가 그 파일을 전역 설정과 합치는지 시험한 뒤에 켭니다.', 'Codex project exceptions (<code>&lt;project&gt;/.codex/config.toml</code>) come after a test that Codex merges that file with the global one.', 'Codex 的项目例外（<code>&lt;项目&gt;/.codex/config.toml</code>）会在测试确认 Codex 会把该文件与全局设置合并后开启。'],
+  'm.n.problem.parse': ['<code>{f}</code>을(를) 읽지 못했습니다: {m}. 이 파일에 쓰는 변경은 적용할 수 없습니다.', 'Could not read <code>{f}</code>: {m}. Changes to this file cannot be applied.', '无法读取 <code>{f}</code>：{m}。无法应用写入该文件的修改。'],
+  'm.n.problem.comments': ['<code>{f}</code>에 주석이 있습니다. 고치면 주석이 사라지므로 대시보드는 이 파일에 쓰지 않습니다. 손으로 고쳐 주세요.', '<code>{f}</code> has comments. Rewriting it would drop them, so the dashboard does not write this file; edit it by hand.', '<code>{f}</code> 中有注释。改写会丢失注释，因此仪表板不会写入此文件，请手动修改。'],
+  'm.why.ro.kimi': ['Kimi Code에는 스킬을 켜고 끄는 설정이 없습니다. 명시 전용은 SKILL.md 앞머리(disable-model-invocation)로, 끄기는 스킬 폴더를 옮겨서 합니다. ~/.agents/skills는 Codex와 ZCode도 함께 읽으니 옮길 때 조심하세요.', 'Kimi Code has no setting that turns skills on or off. Manual only goes in the SKILL.md front matter (disable-model-invocation), and turning off means moving the folder. Codex and ZCode read ~/.agents/skills too, so take care when moving things there.', 'Kimi Code 没有开关技能的设置。仅手动需要写在 SKILL.md 前置信息（disable-model-invocation）中，关闭则需要移走技能文件夹。~/.agents/skills 也会被 Codex 和 ZCode 读取，移动时请注意。'],
+  'm.why.ro.missing': ['{a}의 설정 폴더가 이 PC에 없어 보기만 합니다. 앱을 한 번 켜면 설정 파일이 생깁니다.', '{a} has no settings folder on this PC, so this is view only. Run the app once to create it.', '本机没有 {a} 的设置文件夹，因此仅可查看。运行一次该应用即可生成。'],
+  'm.recs': ['추천', 'Suggested', '推荐'],
+  'm.rec.idle': ['정리 후보 {n}개 → {v}', plural('{n} cleanup candidate → {v}', '{n} cleanup candidates → {v}'), '待清理 {n} 个 → {v}'],
+  'm.rec.dup': ['중복 사본 {n}개 끄기', plural('Turn off {n} extra copy', 'Turn off {n} extra copies'), '关闭 {n} 个重复副本'],
+  'm.rec.tip': ['요청마다 {t} 토큰이 줄어듭니다. 누르면 변경 목록에 넣기만 합니다.', 'Saves {t} tokens per request. Clicking only adds to the change list.', '每次请求减少 {t} token。点击后只会加入变更列表。'],
+  'm.f.aria': ['보기 필터', 'Filter', '筛选'],
+  'm.f.all': ['전체', 'All', '全部'],
+  'm.f.idle': ['정리 후보', 'Cleanup', '待清理'],
+  'm.f.exc': ['예외 있음', 'Exceptions', '有例外'],
+  'm.f.drift': ['기준값과 다름', 'Differs', '与基准不同'],
+  'm.f.pending': ['적용 대기', 'Pending', '待应用'],
+  'm.f.locked': ['잠김', 'Locked', '已锁定'],
+  'm.f.multi': ['여러 에이전트에 있음', 'In several agents', '存在于多个智能体'],
+  'm.f.shared': ['공유 폴더', 'Shared folder', '共享文件夹'],
+  'm.sel.n': ['{n}개 선택', '{n} selected', '已选 {n} 个'],
+  'm.sel.scope': ['범위: {s}', 'Scope: {s}', '范围：{s}'],
+  'm.sel.allAgents': ['모든 에이전트의 전역 기본값', 'Global default of every agent', '所有智能体的全局默认'],
+  'm.sel.clear': ['선택 해제', 'Clear', '取消选择'],
+  'm.sel.aria': ['선택한 스킬 일괄 변경', 'Change the selected skills', '批量修改所选技能'],
+  'm.fb': ['명시 전용을 못 하는 에이전트({list})는', 'Agents without manual only ({list}):', '不支持仅手动的智能体（{list}）：'],
+  'm.fb.skip': ['건너뜀', 'skip them', '跳过'],
+  'm.fb.off': ['꺼짐으로', 'turn off instead', '改为关闭'],
+  'm.gsel': ['{g} 묶음 전체 선택', 'Select everything in {g}', '全选 {g}'],
+  'm.rsel': ['{n} 선택', 'Select {n}', '选择 {n}'],
+  'm.selall': ['보이는 스킬 전체 선택', 'Select all shown', '全选当前显示的技能'],
+  'm.row.uses': ['30일 {n}회', '{n} calls / 30 days', '30 天 {n} 次'],
+  'm.row.only': ['프로젝트: {p}', 'Project: {p}', '项目：{p}'],
+  'm.row.perReq': ['요청마다', 'per request', '每次请求'],
+  'm.row.notHere': ['이 프로젝트에 없음', 'Not in this project', '此项目中没有'],
+  'm.add': ['+ 프로젝트 예외', '+ Project exception', '+ 项目例外'],
+  'm.add.aria': ['{s} 프로젝트 예외 추가', 'Add a project exception for {s}', '为 {s} 添加项目例外'],
+  'm.flag.drift': ['기준값과 다름', 'Differs', '与基准不同'],
+  'm.flag.extra': ['추가 사본', 'Extra copy', '额外副本'],
+  'm.flag.extra.tip': ['같은 이름이 앞에 이미 등록돼 있어, 이 사본의 설명 토큰은 요청마다 그대로 더 나갑니다.', 'The same name is already listed above, so this copy’s description is paid for again on every request.', '同名技能已在前面登记，此副本的描述 token 会在每次请求中重复计入。'],
+  'm.flag.shared': ['공유 폴더', 'Shared folder', '共享文件夹'],
+  'm.flag.shared.tip': ['~/.agents/skills: Codex · Kimi Code · ZCode가 함께 읽습니다. 설정은 에이전트마다 따로 바꿉니다.', '~/.agents/skills: read by Codex, Kimi Code, and ZCode. Settings are still per agent.', '~/.agents/skills：Codex、Kimi Code、ZCode 共同读取。设置仍按智能体分别修改。'],
+  'm.flag.fm': ['SKILL.md 명시 전용', 'Manual in SKILL.md', 'SKILL.md 中为仅手动'],
+  'm.flag.fm.tip': ['SKILL.md에 disable-model-invocation: true가 있습니다.', 'SKILL.md says disable-model-invocation: true.', 'SKILL.md 中写有 disable-model-invocation: true。'],
+  'm.flag.plugin': ['플러그인', 'Plugin', '插件'],
+  'm.seg.aria': ['{s} 호출 방식', 'Invocation of {s}', '{s} 的调用方式'],
+  'm.tip.drift': ['기준값: {b} · 지금 설정: {a}', 'Baseline: {b} · current setting: {a}', '基准：{b} · 当前设置：{a}'],
+  'm.tip.pending': ['적용 대기: {b} → {a}', 'Pending: {b} → {a}', '待应用：{b} → {a}'],
+  'm.tip.unmanaged': ['기준값에 없는 값입니다(관리 안 함). 여기서 값을 정하면 기준값에 들어갑니다.', 'Not in your baseline (unmanaged). Setting it here adds it to the baseline.', '不在基准中（未管理）。在这里设置后会加入基准。'],
+  'm.tip.none': ['없음', 'none', '无'],
+  'm.tip.dirty': ['커밋 안 된 팀 파일', 'Team file not committed', '未提交的团队文件'],
+  'm.why.plugin': ['플러그인 스킬은 하나씩 바꿀 수 없습니다. 플러그인 전체를 켜고 끄세요.', 'Plugin skills cannot change one by one. Turn the whole plugin on or off.', '插件技能无法逐个修改，请整体开关插件。'],
+  'm.why.managed': ['관리자 정책(managed settings)이 {v}(으)로 정해 두어 바꿀 수 없습니다.', 'Managed settings fix it to {v}, so it cannot change here.', '管理员策略（managed settings）将其固定为 {v}，无法修改。'],
+  'm.why.hard': ['Qwen Code 설정의 skills.disabled(강제 끔)에 있어 여기서 켤 수 없습니다.', 'It is in Qwen Code’s skills.disabled (forced off), so it cannot be turned on here.', '它位于 Qwen Code 的 skills.disabled（强制关闭）中，无法在此开启。'],
+  'm.why.fm': ['SKILL.md에 disable-model-invocation: true가 있어 설정으로 자동을 켤 수 없습니다.', 'SKILL.md says disable-model-invocation: true, so settings cannot make it auto.', 'SKILL.md 中写有 disable-model-invocation: true，无法通过设置改为自动。'],
+  'm.why.notInProject': ['{p}에는 이 스킬이 없습니다.', '{p} does not have this skill.', '{p} 中没有此技能。'],
+  'm.why.layer': ['이 에이전트에는 이 층이 없습니다.', 'This agent has no such layer.', '此智能体没有这一层。'],
+  'm.why.inheritGlobal': ['전역 기본값에는 따를 값이 없습니다.', 'The global default has nothing to inherit from.', '全局默认没有可继承的值。'],
+  'm.why.value': ['이 에이전트는 이 값을 설정으로 정할 수 없습니다.', 'This agent’s settings cannot hold this value.', '此智能体的设置无法使用该值。'],
+  'm.why.value.codex': ['Codex는 설정으로 명시 전용을 정할 수 없습니다. 스킬 폴더 안의 파일(agents/openai.yaml)을 고쳐야 하고, 업데이트하면 사라집니다.', 'Codex settings cannot make a skill manual only. That takes a file inside the skill folder (agents/openai.yaml), which an update wipes out.', 'Codex 无法通过设置改为仅手动，需要修改技能文件夹中的文件（agents/openai.yaml），更新后会被覆盖。'],
+  'm.why.value.qwen': ['Qwen Code는 SKILL.md 앞머리(disable-model-invocation)로만 명시 전용을 정할 수 있습니다.', 'Qwen Code makes a skill manual only through its SKILL.md front matter (disable-model-invocation) alone.', 'Qwen Code 只能通过 SKILL.md 前置信息（disable-model-invocation）设为仅手动。'],
+  'm.why.value.zcode': ['ZCode 설정에는 켜기와 끄기만 있습니다.', 'ZCode settings only turn skills on or off.', 'ZCode 的设置只有开启和关闭。'],
+  'm.empty': ['이 에이전트에 스킬이 없습니다', 'This agent has no skills', '此智能体没有技能'],
+  'm.empty.hint': ['스킬을 두는 곳: {dirs}', 'Skills go in: {dirs}', '技能存放位置：{dirs}'],
+  'm.xcount': ['스킬 {n}개', plural('{n} skill', '{n} skills'), '{n} 个技能'],
+
+  // invocation page: exception menu and cross-agent view
+  'm.x.title': ['프로젝트 예외', 'Project exception', '项目例外'],
+  'm.x.project': ['프로젝트', 'Project', '项目'],
+  'm.x.where': ['어디에 둘까요', 'Where to keep it', '保存在哪里'],
+  'm.x.mine': ['나만', 'Only me', '仅自己'],
+  'm.x.mine.sub': ['이 PC · settings.local.json', 'this PC · settings.local.json', '本机 · settings.local.json'],
+  'm.x.team': ['팀 공유', 'Team', '团队共享'],
+  'm.x.team.sub': ['커밋 · settings.json', 'committed · settings.json', '提交 · settings.json'],
+  'm.x.file': ['저장 위치', 'Saved in', '保存位置'],
+  'm.x.file.sub': ['{f} · git에 올리면 팀과 공유', '{f} · shared with the team once committed', '{f} · 提交到 git 后与团队共享'],
+  'm.x.values': ['값', 'Value', '值'],
+  'm.x.mineWins': ['이 PC에는 "나만" 값({v})이 있어서, 팀 값을 바꿔도 여기서는 나만 값이 이깁니다.', 'This PC has an only-me value ({v}), so here it wins over whatever the team value is.', '本机有“仅自己”的值（{v}），因此在这里无论团队值是什么，都以仅自己的值为准。'],
+  'm.x.teamNote': ['팀 공유 값은 기준값이 아니라 저장소의 파일에 바로 씁니다. 적용 뒤 커밋해야 동료에게 갑니다.', 'Team values go straight into the repository’s file, not your baseline. Commit after applying so teammates get them.', '团队共享值直接写入仓库中的文件，而不是你的基准。应用后需要提交，同事才能获得。'],
+  'm.x.qwenTrust': ['Qwen Code는 신뢰한 폴더에서만 프로젝트의 skills.enabled를 읽습니다.', 'Qwen Code reads a project’s skills.enabled only in trusted folders.', 'Qwen Code 仅在受信任的文件夹中读取项目的 skills.enabled。'],
+  'm.x.close': ['닫기', 'Close', '关闭'],
+  'm.x.clear': ['예외 지우기', 'Remove exception', '删除例外'],
+  'm.x.noProjects': ['아직 아는 프로젝트가 없습니다. 그 프로젝트에서 에이전트를 한 번 쓰거나, 대시보드를 --project &lt;폴더&gt;로 켜세요.', 'No projects are known yet. Use an agent in the project once, or start the dashboard with --project &lt;dir&gt;.', '还没有已知的项目。请先在该项目中使用一次智能体，或用 --project &lt;目录&gt; 启动仪表板。'],
+  'm.xc.lead': ['한 스킬을 모든 에이전트에서 한 번에 바꿉니다. 칸은 각 에이전트의 전역 기본값입니다. 칸을 누르면 그 에이전트만, 스킬을 골라 위 막대를 쓰면 모든 에이전트가 바뀝니다. 프로젝트 예외는 에이전트별 보기에서 다룹니다.', 'Change one skill in every agent at once. Each cell is that agent’s global default. Click a cell to change only that agent, or select skills and use the bar to change every agent. Project exceptions live in the agent view.', '一次性在所有智能体中修改同一个技能。每格是该智能体的全局默认。点击格子只修改该智能体；选中技能后使用上方工具栏可修改所有智能体。项目例外在按智能体视图中处理。'],
+  'm.xc.copies': ['사본 {n}개를 모두 바꿉니다. 하나만 바꾸려면 에이전트별 보기에서 고르세요.', 'This changes all {n} copies. To change one, pick it in the agent view.', '将修改全部 {n} 个副本。若只改一个，请在按智能体视图中选择。'],
+  'm.xc.goto': ['에이전트별 보기로 →', 'Open in the agent view →', '在按智能体视图中打开 →'],
+  'm.xc.none': ['이 에이전트에 없는 스킬', 'Not in this agent', '此智能体中没有'],
+
+  // invocation page: change list, preview, apply
+  'm.cart': ['변경 목록', 'Changes', '变更列表'],
+  'm.cart.empty': ['바꾼 값이 여기에 모입니다. 적용하기 전까지는 어떤 파일도 바뀌지 않습니다.', 'Changes collect here. No file changes until you apply.', '修改会汇集在这里。应用前不会修改任何文件。'],
+  'm.cart.legend': ['자동은 요청마다 설명 토큰이 들고, /명시 전용은 이름으로 부를 때만, 꺼짐은 아예 숨깁니다.', 'Auto costs description tokens on every request, /manual only costs nothing until called by name, and off hides the skill.', '自动在每次请求中消耗描述 token，仅 / 手动只在按名称调用时消耗，关闭则完全隐藏。'],
+  'm.cart.tokens': ['요청마다 토큰 (모든 프로젝트 공통)', 'Tokens per request (shared by all projects)', '每次请求 token（所有项目共用）'],
+  'm.cart.team': ['팀 공유 파일 {n}개가 바뀝니다. 적용 뒤 커밋해야 동료에게 전달됩니다.', plural('{n} team file changes. Commit it after applying so teammates get it.', '{n} team files change. Commit them after applying so teammates get them.'), '将修改 {n} 个团队共享文件。应用后需要提交，同事才能获得。'],
+  'm.cart.discard': ['모두 취소', 'Discard all', '全部取消'],
+  'm.cart.preview': ['미리보기 후 적용', 'Preview and apply', '预览并应用'],
+  'm.cart.x': ['{s} 변경 취소', 'Discard the change to {s}', '取消对 {s} 的修改'],
+  'm.cart.revert': ['기준값대로 되돌리기 · 지금 {a} → {b}', 'Revert to baseline · now {a} → {b}', '恢复为基准 · 当前 {a} → {b}'],
+  'm.cart.adopt': ['지금 값 채택 · 기준값 {b} → {a}', 'Keep current value · baseline {b} → {a}', '采用当前值 · 基准 {b} → {a}'],
+  'm.cart.last': ['마지막 적용: {when} · 파일 {n}개', 'Last applied {when} · {n} files', '上次应用：{when} · {n} 个文件'],
+  'm.undo': ['되돌리기', 'Undo', '撤销'],
+  'm.dock': ['변경 <b>{n}</b>건 · 요청마다 <b>{d}</b>', plural('<b>{n}</b> change · <b>{d}</b> per request', '<b>{n}</b> changes · <b>{d}</b> per request'), '变更 <b>{n}</b> 项 · 每次请求 <b>{d}</b>'],
+  'm.dock.empty': ['바꾼 값이 여기에 모입니다', 'Changes collect here', '修改会汇集在这里'],
+  'm.dock.open': ['목록 보기', 'Show list', '查看列表'],
+  'm.dock.close': ['목록 닫기', 'Hide list', '收起列表'],
+  'm.dlg.title': ['변경 미리보기', 'Preview changes', '预览变更'],
+  'm.dlg.sub': ['변경 {n}건 · 파일 {f}개. 기준값과 에이전트 설정을 함께 바꿔서 둘이 어긋나지 않습니다.', plural('{n} change · {f} files. The baseline and the agent settings change together, so they stay in step.', '{n} changes · {f} files. The baseline and the agent settings change together, so they stay in step.'), '变更 {n} 项 · 文件 {f} 个。基准与智能体设置一起修改，保持一致。'],
+  'm.dlg.loading': ['바뀔 내용을 계산하는 중…', 'Working out what changes…', '正在计算修改内容…'],
+  'm.dlg.hint': ['적용하면 바뀌는 파일을 먼저 백업합니다({dir}). 에이전트는 새 세션부터 반영합니다.', 'Applying backs up every file it changes first ({dir}). Agents pick it up in their next session.', '应用前会先备份将被修改的文件（{dir}）。智能体从新会话开始生效。'],
+  'm.dlg.cancel': ['돌아가기', 'Back', '返回'],
+  'm.dlg.apply': ['적용', 'Apply', '应用'],
+  'm.dlg.applying': ['적용 중…', 'Applying…', '应用中…'],
+  'm.dlg.retry': ['다시 시도', 'Try again', '重试'],
+  'm.dlg.new': ['새 파일', 'new file', '新文件'],
+  'm.dlg.lines': ['{n}건', plural('{n} change', '{n} changes'), '{n} 项'],
+  'm.dlg.none': ['(없음)', '(none)', '（无）'],
+  'm.dlg.nothing': ['바뀌는 파일이 없습니다. 파일이 이미 그 값입니다.', 'Nothing to write: the files already say this.', '没有需要写入的内容：文件已经是这个值。'],
+  'm.role.policy': ['기준값', 'Baseline', '基准'],
+  'm.role.mine': ['내 설정', 'My settings', '我的设置'],
+  'm.role.team': ['팀 공유 · 커밋 필요', 'Team · needs a commit', '团队共享 · 需要提交'],
+  'm.err.title': ['{f}을(를) 쓰지 못했습니다.', 'Could not write {f}.', '无法写入 {f}。'],
+  'm.err.generic': ['적용하지 못했습니다.', 'Could not apply.', '无法应用。'],
+  'm.err.rolledBack': ['이미 쓴 다른 파일도 모두 원래대로 되돌렸습니다.', 'Every file already written was put back as it was.', '已写入的其他文件也全部恢复原状。'],
+  'm.err.changed': ['미리보기 뒤에 파일이 바뀌었습니다. 다시 시도하면 새 내용 위에 씁니다.', 'The file changed after the preview. Try again to write on top of the new contents.', '预览之后文件发生了变化。重试即可在新内容上写入。'],
+  'm.err.locked': ['파일이 잠겨 있습니다. 그 에이전트 앱이 실행 중이면 닫고 다시 시도하세요.', 'The file is locked. If that agent’s app is running, close it and try again.', '文件被锁定。如果该智能体应用正在运行，请关闭后重试。'],
+  'm.err.comments': ['주석이 있는 파일이라 대시보드가 고치지 않습니다. 손으로 고쳐 주세요.', 'The file has comments, so the dashboard leaves it alone. Edit it by hand.', '文件中有注释，仪表板不会修改它，请手动编辑。'],
+  'm.err.parse': ['파일을 읽지 못했습니다. JSON 형식을 확인하세요.', 'The file could not be read. Check its JSON.', '无法读取文件，请检查其 JSON 格式。'],
+  'm.err.inline-toml': ['config.toml에 skills.config가 한 줄 형식으로 들어 있어 대시보드가 고치지 않습니다. 손으로 고쳐 주세요.', 'config.toml has skills.config written inline, so the dashboard leaves it alone. Edit it by hand.', 'config.toml 中的 skills.config 为单行写法，仪表板不会修改，请手动编辑。'],
+  'm.err.conflict': ['마지막 적용 뒤에 다시 바뀐 파일이 있어 되돌리지 않았습니다: {f}', 'Not undone: these files changed again after the apply: {f}', '未撤销：以下文件在应用后又被修改：{f}'],
+  'm.err.rejected': ['서버가 요청 {n}건을 받아들이지 않았습니다. 화면이 오래됐을 수 있으니 다시 불러오세요.', plural('The server refused {n} change. The page may be out of date; reload it.', 'The server refused {n} changes. The page may be out of date; reload it.'), '服务器拒绝了 {n} 项修改。页面可能已过期，请重新加载。'],
+  'm.err.token': ['이 페이지로는 설정을 바꿀 수 없습니다. <code>node setup.mjs dashboard</code>가 알려 준 주소로 여세요.', 'This page cannot change settings. Open it at the address <code>node setup.mjs dashboard</code> prints.', '无法通过此页面修改设置。请使用 <code>node setup.mjs dashboard</code> 输出的地址打开。'],
+  'm.t.staged': ['{n}건을 변경 목록에 넣었습니다', plural('Added {n} change to the list', 'Added {n} changes to the list'), '已将 {n} 项加入变更列表'],
+  'm.t.skipped': [' · 바꿀 수 없는 {n}개는 건너뜀', ' · skipped {n} that cannot change', ' · 跳过 {n} 个无法修改的'],
+  'm.t.fell': [' · {n}건은 꺼짐으로', ' · {n} turned off instead', ' · {n} 项改为关闭'],
+  'm.t.applied': ['{n}건 적용했습니다 · 새 세션부터 반영됩니다', plural('Applied {n} change · agents use it from their next session', 'Applied {n} changes · agents use them from their next session'), '已应用 {n} 项 · 从新会话开始生效'],
+  'm.t.team': [' · 팀 파일 {n}개 커밋 필요', plural(' · {n} team file needs a commit', ' · {n} team files need a commit'), ' · {n} 个团队文件需要提交'],
+  'm.t.undone': ['마지막 적용을 되돌렸습니다', 'Undid the last apply', '已撤销上次应用'],
+  'm.t.copied': ['git 명령을 복사했습니다', 'Copied the git commands', '已复制 git 命令'],
+
   // guide: shared
   'toc.start': ['이 대시보드로 알 수 있는 것', 'What this dashboard tells you', '本仪表板能告诉你什么'],
   'toc.flow': ['스킬이 불리는 흐름', 'How a skill gets called', '技能如何被调用'],
@@ -1317,7 +1825,7 @@ const T = {
   'g.cost.p2': ['그래서 정리하는 기준은 두 가지입니다. 자주 쓰는 스킬은 자동으로 두고, 가끔만 쓰는 스킬은 /명시 전용으로 바꿔 항상 드는 토큰을 0으로 만듭니다. 호출할 때 드는 토큰은 실제로 쓸 때만 나가므로 크게 걱정하지 않아도 됩니다.', 'So there are two rules for tidying up. Keep skills you use often on auto; switch the ones you use now and then to /manual only so their always-on cost drops to zero. On-use tokens are only spent when you actually use a skill, so they are rarely the problem.', '因此清理的原则有两条：常用技能保持自动；偶尔使用的技能改为仅 / 手动，让常驻 token 变为 0。调用时 token 只在真正使用时产生，通常不必担心。'],
 
   // guide: modes
-  'g.modes.p': ['현황판의 "호출 방식" 열은 스킬이 어떤 길로 실행될 수 있는지, 그리고 요청마다 토큰을 쓰는지 알려 줍니다. 점 색은 어느 비용이 드는지를 뜻합니다.', 'The “Invocation” column on the overview tells you how a skill can run and whether it costs tokens on every request. The dot color shows which cost applies.', '概览中的“调用方式”列说明技能能通过哪条路径运行，以及是否在每次请求中消耗 token。圆点颜色表示产生哪种开销。'],
+  'g.modes.p': ["현황판의 \"호출 방식\" 열은 스킬이 어떤 길로 실행될 수 있는지, 그리고 요청마다 토큰을 쓰는지 알려 줍니다. 점 색은 어느 비용이 드는지를 뜻합니다. 바꾸는 곳은 위쪽 메뉴의 <b>호출 방식</b> 페이지입니다.","The “Invocation” column on the overview tells you how a skill can run and whether it costs tokens on every request. The dot color shows which cost applies. You change it on the <b>Invocation</b> page in the top menu.","概览中的“调用方式”列说明技能能通过哪条路径运行，以及是否在每次请求中消耗 token。圆点颜色表示产生哪种开销。修改请前往顶部菜单的<b>调用方式</b>页面。"],
   'g.modes.h1': ['호출 방식', 'Mode', '调用方式'],
   'g.modes.h2': ['목록에 설명이 들어감', 'Description listed', '描述在列表中'],
   'g.modes.h3': ['모델이 스스로 부름', 'Model calls it itself', '模型自行调用'],
@@ -1326,8 +1834,8 @@ const T = {
   'g.modes.h6': ['이렇게 됩니다', 'How you get it', '如何设置'],
   'g.modes.some': ['있음', 'Yes', '有'],
   'g.modes.on': ['기본값', 'Default', '默认'],
-  'g.modes.manual': ['<code>policy.json</code>의 <code>manualSkills</code>, 또는 SKILL.md의 <code>disable-model-invocation: true</code>', '<code>manualSkills</code> in <code>policy.json</code>, or <code>disable-model-invocation: true</code> in SKILL.md', '<code>policy.json</code> 的 <code>manualSkills</code>，或 SKILL.md 中的 <code>disable-model-invocation: true</code>'],
-  'g.modes.off': ['<code>skills off &lt;이름&gt;</code>, 또는 <code>offSkills</code>', '<code>skills off &lt;name&gt;</code>, or <code>offSkills</code>', '<code>skills off &lt;名称&gt;</code>，或 <code>offSkills</code>'],
+  'g.modes.manual': ["<b>호출 방식</b> 페이지, <code>skills manual &lt;이름&gt;</code>, 또는 SKILL.md의 <code>disable-model-invocation: true</code>","The <b>Invocation</b> page, <code>skills manual &lt;name&gt;</code>, or <code>disable-model-invocation: true</code> in SKILL.md","<b>调用方式</b>页面、<code>skills manual &lt;名称&gt;</code>，或 SKILL.md 中的 <code>disable-model-invocation: true</code>"],
+  'g.modes.off': ["<b>호출 방식</b> 페이지, 또는 <code>skills off &lt;이름&gt;</code>","The <b>Invocation</b> page, or <code>skills off &lt;name&gt;</code>","<b>调用方式</b>页面，或 <code>skills off &lt;名称&gt;</code>"],
   'g.modes.pluginOff': ['<code>skills off plugin:&lt;이름&gt;</code>. 플러그인 스킬은 하나씩 끌 수 없습니다', '<code>skills off plugin:&lt;name&gt;</code>. Plugin skills cannot be turned off one by one', '<code>skills off plugin:&lt;名称&gt;</code>。插件技能无法逐个关闭'],
   'g.modes.shadowed': ['같은 이름의 전역 스킬이 대신 쓰입니다 (아래 그림)', 'A global skill with the same name is used instead (see below)', '改用同名的全局技能（见下图）'],
   'g.modes.cap': ['현황판에는 "미설치"도 나옵니다. 대화 기록에는 호출이 남아 있지만 지금은 폴더가 없는 스킬로, 내장 스킬이거나 쓴 뒤에 지운 스킬입니다. 이 표는 Claude Code 기준입니다. Codex는 목록에 있는 스킬을 모두 자동으로 보고, <code>$이름</code>으로 직접 부를 수 있습니다.', 'The overview also shows “Not installed”: skills with calls in the transcripts but no folder now — built in, or deleted after use. This table describes Claude Code. Codex treats every listed skill as auto, and you can call one directly with <code>$name</code>.', '概览中还会出现“未安装”：对话记录里有调用、但现在没有文件夹的技能，可能是内置或用后删除的。此表以 Claude Code 为准。Codex 将列表中的技能都视为自动，也可以用 <code>$名称</code> 直接调用。'],
@@ -1348,7 +1856,7 @@ const T = {
   'g.data.p': ['"다시 수집"을 누르면 수집기가 세 곳을 읽고 결과를 <code>stats.json</code>에 쌓습니다. 모든 계산은 이 PC 안에서 하고, "토큰 정확히 세기"를 누를 때만 Claude Code 스킬 글을 Anthropic API로 보냅니다.', 'When you press “Collect again”, the collector reads three kinds of sources and adds the results to <code>stats.json</code>. Everything is computed on this PC; only “Count tokens exactly” sends Claude Code skill text to the Anthropic API.', '点击“重新收集”后，收集器会读取三类来源并把结果累积到 <code>stats.json</code>。所有计算都在本机完成，只有点击“精确计算 token”时才会把 Claude Code 技能文本发送到 Anthropic API。'],
   'd5.title': ['에이전트별 대화 기록, SKILL.md 파일, 설정과 설치 기록을 수집기가 읽어 stats.json에 쌓고 현황판이 보여 준다. 토큰 정확히 세기를 누를 때만 count_tokens API를 쓴다.', 'The collector reads each agent’s transcripts, SKILL.md files, and settings and install records, stores them in stats.json, and the overview shows them. The count_tokens API is used only when counting exactly.', '收集器读取各智能体的对话记录、SKILL.md 文件以及设置和安装记录，存入 stats.json 并在概览中显示。只有精确计算时才使用 count_tokens API。'],
   'd5.logs': ['대화 기록', 'Transcripts', '对话记录'],
-  'd5.logs.sub': ['Claude Code · Codex · Gemini · Copilot', 'Claude Code · Codex · Gemini · Copilot', 'Claude Code · Codex · Gemini · Copilot'],
+  'd5.logs.sub': ['Claude Code · Codex · CodeBuddy · Gemini · Copilot', 'Claude Code · Codex · CodeBuddy · Gemini · Copilot', 'Claude Code · Codex · CodeBuddy · Gemini · Copilot'],
   'd5.skill': ['SKILL.md 파일', 'SKILL.md files', 'SKILL.md 文件'],
   'd5.skill.sub': ['전역 · 프로젝트 · 플러그인 폴더', 'global, project, plugin folders', '全局 · 项目 · 插件文件夹'],
   'd5.settings': ['설정과 설치 기록', 'Settings & install records', '设置与安装记录'],
@@ -1399,6 +1907,17 @@ const T = {
   'g.ag.copilot.listing': ['폴더의 SKILL.md로 추정합니다(이름 + 설명).', 'Estimated from SKILL.md files (name + description).', '根据 SKILL.md 估算（名称 + 描述）。'],
   'g.ag.copilot.dirs': ['<code>~/.copilot/skills</code>, <code>&lt;프로젝트&gt;/.github/skills</code>', '<code>~/.copilot/skills</code>, <code>&lt;project&gt;/.github/skills</code>', '<code>~/.copilot/skills</code>、<code>&lt;项目&gt;/.github/skills</code>'],
   'g.ag.copilot.note': ['실험적입니다. 버전에 따라 형식이 바뀌면 호출이나 토큰이 빠질 수 있습니다.', 'Experimental. If a new version changes the format, calls or tokens may be missed.', '实验性功能。版本更新导致格式变化时，可能漏计调用或 token。'],
+  'g.ag.codebuddy.logs': ['<code>~/.codebuddy/projects/**/*.jsonl</code>. Claude Code와 같은 형식이라 같은 방법으로 읽습니다. 로그인한 뒤부터 쌓입니다.', '<code>~/.codebuddy/projects/**/*.jsonl</code>. The same format as Claude Code, read the same way. It fills up once you sign in.', '<code>~/.codebuddy/projects/**/*.jsonl</code>。格式与 Claude Code 相同，读取方式也相同。登录后开始累积。'],
+  'g.ag.codebuddy.calls': ['Claude Code와 같습니다: Skill 도구 호출과 <code>/이름</code>.', 'Same as Claude Code: Skill tool calls and <code>/name</code>.', '与 Claude Code 相同：Skill 工具调用和 <code>/名称</code>。'],
+  'g.ag.codebuddy.listing': ['<code>~/.codebuddy/settings.json</code>과 프로젝트 <code>.codebuddy/settings(.local).json</code>의 <code>skillOverrides</code>로 계산합니다.', 'Worked out from <code>skillOverrides</code> in <code>~/.codebuddy/settings.json</code> and the project’s <code>.codebuddy/settings(.local).json</code>.', '根据 <code>~/.codebuddy/settings.json</code> 和项目 <code>.codebuddy/settings(.local).json</code> 中的 <code>skillOverrides</code> 计算。'],
+  'g.ag.codebuddy.dirs': ['<code>~/.codebuddy/skills</code>, <code>&lt;프로젝트&gt;/.codebuddy/skills</code>', '<code>~/.codebuddy/skills</code>, <code>&lt;project&gt;/.codebuddy/skills</code>', '<code>~/.codebuddy/skills</code>、<code>&lt;项目&gt;/.codebuddy/skills</code>'],
+  'g.ag.qwen.logs': ['<code>~/.qwen/projects/&lt;폴더&gt;/chats/*.jsonl</code>. 호출 기록 읽기는 아직 준비 중입니다.', '<code>~/.qwen/projects/&lt;folder&gt;/chats/*.jsonl</code>. Reading call history is not ready yet.', '<code>~/.qwen/projects/&lt;文件夹&gt;/chats/*.jsonl</code>。调用记录的读取尚在准备中。'],
+  'g.ag.qwen.listing': ['폴더의 SKILL.md와 <code>settings.json</code>의 <code>skills.disabled</code> · <code>defaultDisabled</code> · <code>enabled</code>로 추정합니다.', 'Estimated from the SKILL.md files and <code>skills.disabled</code> · <code>defaultDisabled</code> · <code>enabled</code> in <code>settings.json</code>.', '根据 SKILL.md 以及 <code>settings.json</code> 中的 <code>skills.disabled</code> · <code>defaultDisabled</code> · <code>enabled</code> 估算。'],
+  'g.ag.qwen.dirs': ['<code>~/.qwen/skills</code>, <code>&lt;프로젝트&gt;/.qwen/skills</code>', '<code>~/.qwen/skills</code>, <code>&lt;project&gt;/.qwen/skills</code>', '<code>~/.qwen/skills</code>、<code>&lt;项目&gt;/.qwen/skills</code>'],
+  'g.ag.apps': ['ZCode · Kimi Code (앱)', 'ZCode · Kimi Code (apps)', 'ZCode · Kimi Code（应用）'],
+  'g.ag.apps.logs': ['세션이 앱 저장소(ZCode는 SQLite)에 있어 아직 읽지 않습니다. 첫 세션으로 형식을 확인한 뒤에 더합니다.', 'Sessions live in the apps’ own stores (SQLite for ZCode) and are not read yet; that comes after a first session shows the format.', '会话保存在应用自己的存储中（ZCode 为 SQLite），尚未读取；需先用首个会话确认格式后再加入。'],
+  'g.ag.apps.dirs': ['공유 폴더 <code>~/.agents/skills</code> (Codex도 읽음)', 'The shared folder <code>~/.agents/skills</code> (Codex reads it too)', '共享文件夹 <code>~/.agents/skills</code>（Codex 也会读取）'],
+  'g.ag.apps.note': ['앱을 한 번 켜서 설정 폴더(<code>~/.zcode</code>, <code>~/.kimi-code</code>)가 생겨야 나타납니다. Kimi Code는 스킬 설정이 없어 호출 방식 페이지에서 보기만 합니다.', 'They show up once the app has run and made its folder (<code>~/.zcode</code>, <code>~/.kimi-code</code>). Kimi Code has no skill settings, so the Invocation page only shows it.', '应用运行过一次并生成设置文件夹（<code>~/.zcode</code>、<code>~/.kimi-code</code>）后才会出现。Kimi Code 没有技能设置，调用方式页面中仅可查看。'],
   'g.agents.p2': ['한 에이전트가 다른 에이전트의 스킬 폴더를 함께 읽는 설정은 반영하지 않습니다. Cursor, Antigravity처럼 기록을 데이터베이스나 바이너리 파일로 두는 도구는 수집하지 않습니다. 수집한 내용은 모두 <code>~/.claude/skill-policy/stats.json</code> 하나에 쌓입니다.', 'Setups where one agent also reads another agent’s skill folders are not reflected. Tools that keep their logs in a database or binary files, such as Cursor or Antigravity, are not collected. Everything collected goes into one file, <code>~/.claude/skill-policy/stats.json</code>.', '不会反映一个智能体同时读取其他智能体技能文件夹的配置。Cursor、Antigravity 等把记录存在数据库或二进制文件中的工具不会被收集。收集的内容全部保存在 <code>~/.claude/skill-policy/stats.json</code> 这一个文件中。'],
 
   // guide: exact token counts
@@ -1457,8 +1976,8 @@ const T = {
 
   // guide: tidy
   'g.tidy.idleH': ['안 쓰는 자동 스킬 줄이기', 'Trim unused auto skills', '减少不用的自动技能'],
-  'g.tidy.idleP': ['현황판에서 "정리 후보만"을 켜고 요청마다 드는 토큰이 큰 순서로 봅니다. 가끔은 쓰는 스킬이면 명시 전용으로, 전혀 안 쓰면 끕니다. 설정은 새 세션부터 적용됩니다.', 'On the overview, turn on “Cleanup candidates only” and sort by tokens per request. Make the occasionally used ones manual only; turn off the ones you never use. Changes apply from the next session.', '在概览中打开“仅待清理”，按每次请求 token 从大到小查看。偶尔使用的改为仅手动，完全不用的关闭。设置从新会话开始生效。'],
-  'g.tidy.idleCode': ['<span class="c"># 끄기 (파일은 남김)</span>\nnode setup.mjs skills off &lt;스킬 이름&gt;\n<span class="c"># 명시 전용으로: ~/.claude/skill-policy/policy.json의 manualSkills에 이름을 넣고</span>\nnode ~/.claude/skill-policy/skill-policy.mjs --apply', '<span class="c"># turn off (files stay)</span>\nnode setup.mjs skills off &lt;skill name&gt;\n<span class="c"># manual only: add the name to manualSkills in ~/.claude/skill-policy/policy.json, then</span>\nnode ~/.claude/skill-policy/skill-policy.mjs --apply', '<span class="c"># 关闭（保留文件）</span>\nnode setup.mjs skills off &lt;技能名称&gt;\n<span class="c"># 改为仅手动：把名称加入 ~/.claude/skill-policy/policy.json 的 manualSkills，然后</span>\nnode ~/.claude/skill-policy/skill-policy.mjs --apply'],
+  'g.tidy.idleP': ["현황판에서 \"정리 후보만\"을 켜고 요청마다 드는 토큰이 큰 순서로 봅니다. 가끔은 쓰는 스킬이면 명시 전용으로, 전혀 안 쓰면 끕니다. 호출 방식 페이지에서는 에이전트마다 한 번에 바꾸고, 미리보기로 바뀌는 파일을 확인한 뒤 적용합니다. 설정은 새 세션부터 적용됩니다.","On the overview, turn on “Cleanup candidates only” and sort by tokens per request. Make the occasionally used ones manual only; turn off the ones you never use. The Invocation page changes them per agent in one go, with a preview of every file before it applies. Changes apply from the next session.","在概览中打开“仅待清理”，按每次请求 token 从大到小查看。偶尔使用的改为仅手动，完全不用的关闭。调用方式页面可按智能体一次性修改，应用前可预览所有将被修改的文件。设置从新会话开始生效。"],
+  'g.tidy.idleCode': ["<span class=\"c\"># 가장 쉬운 방법: 호출 방식 페이지 → 추천 \"정리 후보 → 명시 전용\"</span>\n<span class=\"c\"># 명령으로 할 때 (Claude Code 전역)</span>\nnode setup.mjs skills manual &lt;스킬 이름&gt;   <span class=\"c\"># 명시 전용</span>\nnode setup.mjs skills off &lt;스킬 이름&gt;      <span class=\"c\"># 끄기 (파일은 남김)</span>","<span class=\"c\"># easiest: Invocation page → suggestion \"cleanup candidates → manual only\"</span>\n<span class=\"c\"># from the command line (Claude Code, global)</span>\nnode setup.mjs skills manual &lt;skill name&gt;   <span class=\"c\"># manual only</span>\nnode setup.mjs skills off &lt;skill name&gt;      <span class=\"c\"># turn off (files stay)</span>","<span class=\"c\"># 最简单：调用方式页面 → 推荐“待清理 → 仅手动”</span>\n<span class=\"c\"># 用命令（Claude Code 全局）</span>\nnode setup.mjs skills manual &lt;技能名称&gt;   <span class=\"c\"># 仅手动</span>\nnode setup.mjs skills off &lt;技能名称&gt;      <span class=\"c\"># 关闭（保留文件）</span>"],
   'g.tidy.dupH': ['Codex 중복 등록 없애기', 'Remove Codex duplicates', '清除 Codex 重复登记'],
   'g.tidy.dupP': ['"중복 등록만"을 켜고 Codex를 고른 뒤, 행을 펼쳐 경로를 봅니다. 예를 들어 gstack 스킬이 <code>~/.codex/skills/&lt;이름&gt;</code>과 <code>~/.codex/skills/gstack/&lt;이름&gt;</code>에 모두 있으면 한쪽만 남깁니다. 같은 플러그인이 두 마켓플레이스에서 설치됐다면 Codex의 플러그인 화면에서 하나를 끕니다. 다음 Codex 세션부터 목록이 줄어듭니다.', 'Turn on “Duplicates only”, choose Codex, and expand the rows to see the paths. If a gstack skill sits in both <code>~/.codex/skills/&lt;name&gt;</code> and <code>~/.codex/skills/gstack/&lt;name&gt;</code>, keep only one. If one plugin is installed from two marketplaces, turn one off in Codex’s plugin settings. The list shrinks from the next Codex session.', '打开“仅重复登记”并选择 Codex，展开行查看路径。例如 gstack 技能同时位于 <code>~/.codex/skills/&lt;名称&gt;</code> 和 <code>~/.codex/skills/gstack/&lt;名称&gt;</code> 时，只保留一处。同一插件从两个市场安装时，在 Codex 的插件界面关闭其中一个。从下一次 Codex 会话起列表会变短。'],
   'g.tidy.pluginH': ['플러그인 통째로 끄기', 'Turn off a whole plugin', '整体关闭插件'],
@@ -1547,7 +2066,15 @@ const modeOf = (s) => {
 const catLabel = (id) => (T[`cat.${id}`] ? t(`cat.${id}`) : id);
 const catHint = (id) => (T[`cat.${id}.hint`] ? t(`cat.${id}.hint`) : '');
 const agentOf = (id) => data?.agents.find((a) => a.id === id) ?? { id, label: id };
-const agentTag = (id) => `<span class="agent-tag"><i class="adot" style="--c:var(--ag-${esc(id)})"></i>${esc(agentOf(id).label)}</span>`;
+// Four agents have a validated color; the rest a two-letter badge. The name always goes next to either.
+const COLOR_AGENTS = ['claude', 'codex', 'codebuddy', 'qwen'];
+const AGENT_MONO = { gemini: 'GM', copilot: 'CP', zcode: 'ZC', kimi: 'KM' };
+const agentMark = (id) => (COLOR_AGENTS.includes(id)
+  ? `<i class="adot" style="--c:var(--ag-${esc(id)})"></i>`
+  : `<span class="amono" aria-hidden="true">${esc(AGENT_MONO[id] ?? String(id).slice(0, 2).toUpperCase())}</span>`);
+const agentTag = (id, label = agentOf(id).label) => `<span class="agent-tag">${agentMark(id)}${esc(label)}</span>`;
+// Agents whose invocation the Invocation page can show (the rest have no such settings).
+const MODE_AGENT_IDS = ['claude', 'codebuddy', 'qwen', 'codex', 'zcode', 'kimi'];
 const whereOf = (s) => ({
   user: t('where.user'),
   system: t('where.system'),
@@ -1581,6 +2108,7 @@ const INFO = {
   ledger: { n: 2, link: 'terms' },
   measured: { n: 2, link: 'cost' },
   agents: { n: 2, link: 'agents' },
+  baseline: { n: 2, link: 'modes' },
 };
 
 let data = null;
@@ -1639,6 +2167,7 @@ $('lang').addEventListener('change', () => {
   applyStatic();
   setOs(os);
   if (data) render();
+  renderModes();
   route(false);
 });
 
@@ -1704,18 +2233,28 @@ document.addEventListener('keydown', (e) => {
 
 // ---------- pages ----------
 function route(scroll = true) {
-  const [page, section] = window.location.hash.replace(/^#\/?/, '').split('/');
-  const current = page === 'guide' ? 'guide' : 'board';
+  const [page, section, extra] = window.location.hash.replace(/^#\/?/, '').split('/');
+  const current = ['guide', 'modes'].includes(page) ? page : 'board';
   $('page-board').hidden = current !== 'board';
   $('page-guide').hidden = current !== 'guide';
+  $('page-modes').hidden = current !== 'modes';
+  $('m-dock').hidden = current !== 'modes';
   for (const a of document.querySelectorAll('nav.pages a')) {
     if (a.dataset.page === current) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   }
-  document.title = t(current === 'guide' ? 'title.guide' : 'title.board');
+  document.title = t(`title.${current}`);
   if (!scroll) return;
   closePop();
+  closeXpop(false);
   tip.hidden = true;
+  if (current === 'modes') {
+    // #/modes/<agent>/<skill>: opened from the overview's Invocation cell.
+    showModes(section, extra ? decodeURIComponent(extra) : '');
+    return window.scrollTo(0, 0);
+  }
+  // Settings changed on the Invocation page: the overview collects again when it is shown.
+  if (current === 'board' && boardStale && data) load(false);
   const target = section && $(`g-${section}`);
   if (target) target.scrollIntoView({ block: 'start' });
   else window.scrollTo(0, 0);
@@ -1747,6 +2286,7 @@ async function load(exact) {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.statusText);
     data = j;
+    boardStale = false;
     render();
   } catch (e) {
     notice(t('notice.fail', { msg: e.message }));
@@ -1793,7 +2333,7 @@ function setAgent(id) {
   if (data) render();
 }
 function renderAgentBar() {
-  const btn = (id, label, dot) => `<button data-v="${id}" aria-pressed="${agentFilter === id}">${dot ? `<i class="adot" style="--c:var(--ag-${id})"></i>` : ''}${esc(label)}</button>`;
+  const btn = (id, label, dot) => `<button data-v="${id}" aria-pressed="${agentFilter === id}">${dot ? agentMark(id) : ''}${esc(label)}</button>`;
   $('agent').innerHTML = btn('', t('agents.all'), false) + presentAgents().map((a) => btn(a.id, a.label, true)).join('');
 }
 
@@ -1828,7 +2368,7 @@ function renderSummary() {
     if (delta) parts.push(t('sum.fixed.delta', { d: `${delta > 0 ? '+' : ''}${fmt(delta)}` }));
     fixed = stat('fixed', 'always', t('sum.fixed'), bigValue(fmt(a.totals.globalListing), t('unit.tokens')), esc(parts.join(' · ') + est(a)));
   } else {
-    const rows = agents.map((a) => `<div><i class="adot" style="--c:var(--ag-${a.id})"></i><span>${esc(a.label)}</span><b>${fmt(a.totals.globalListing)}</b></div>`).join('');
+    const rows = agents.map((a) => `<div>${agentMark(a.id)}<span>${esc(a.label)}</span><b>${fmt(a.totals.globalListing)}</b></div>`).join('');
     fixed = stat('fixed', 'always', t('sum.fixed'), `<div class="stat-multi">${rows}</div>`, esc(t('sum.fixed.all')));
   }
   const uses30 = sum(agents, (a) => a.totals.uses30);
@@ -1852,7 +2392,9 @@ function renderSummary() {
 
 // ---------- per-agent comparison ----------
 function renderAgents() {
-  const rows = data.agents;
+  // Agents neither installed nor with history get one line under the table instead of an empty row each.
+  const rows = presentAgents();
+  const missingAgents = data.agents.filter((a) => !rows.includes(a));
   const max = (f) => Math.max(1, ...rows.map(f));
   const mL = max((a) => a.totals.globalListing), mC = max((a) => a.totals.uses30), mR = max((a) => a.usage30.requests), mI = max((a) => a.usage30.input);
   const cell = (label, shown, value, top, color, sub) => `<td class="r" data-label="${esc(label)}"><div class="cell-bar">
@@ -1863,10 +2405,10 @@ function renderAgents() {
   const rowsHtml = rows.map((a) => {
     const absent = !a.found && !a.transcripts;
     const share = a.usage30.input && a.totals.globalListing ? (a.usage30.requests * a.totals.globalListing) / a.usage30.input : null;
-    const status = absent ? t('ag.missing') : a.transcripts ? t('ag.logs', { n: fmt(a.transcripts) }) : t('ag.nologs');
+    const status = absent ? t('ag.missing') : a.transcripts ? t('ag.logs', { n: fmt(a.transcripts) }) : a.noLogs ? t('m.status.notread') : t('ag.nologs');
     const dup = a.totals.dup?.count ? `<div><span class="flag">${esc(t('ag.dup', { n: fmt(a.totals.dup.count), t: fmt(a.totals.dup.tokens) }))}</span></div>` : '';
-    return `<tr class="agent-row${absent ? ' absent' : ''}" data-agent="${esc(a.id)}" style="--c:var(--ag-${esc(a.id)})" ${absent ? '' : 'tabindex="0"'} aria-selected="${agentFilter === a.id}">
-      <td><div class="ag-name"><i class="adot"></i><b>${esc(a.label)}</b>${a.experimental ? `<span class="pill">${esc(t('ag.exp'))}</span>` : ''}</div>
+    return `<tr class="agent-row${absent ? ' absent' : ''}" data-agent="${esc(a.id)}" style="--c:var(--ag-${esc(a.id)}, var(--ink-2))" ${absent ? '' : 'tabindex="0"'} aria-selected="${agentFilter === a.id}">
+      <td><div class="ag-name">${agentMark(a.id)}<b>${esc(a.label)}</b>${a.experimental ? `<span class="pill">${esc(t('ag.exp'))}</span>` : ''}</div>
         <div class="cell-sub">${esc(status)}</div>${dup}</td>
       ${cell(t('ag.col.listing'), `<span class="tok always">${fmt(a.totals.globalListing)}</span>`, a.totals.globalListing, mL, 'var(--always)', esc(t(`ag.src.${a.listingSource}`)))}
       ${cell(t('ag.col.calls'), fmt(a.totals.uses30), a.totals.uses30, mC, 'var(--onuse)', esc(t('ag.split', { m: fmt(a.totals.uses30ByModel), u: fmt(a.totals.uses30ByUser) })))}
@@ -1876,7 +2418,8 @@ function renderAgents() {
     </tr>`;
   }).join('');
   const cols = ['name', 'list', 'calls', 'req', 'in', 'share'].map((c) => `<col class="a-${c}">`).join('');
-  $('agents').innerHTML = `<div class="table-wrap"><table class="cmp"><colgroup>${cols}</colgroup><thead><tr>${head}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+  $('agents').innerHTML = `<div class="table-wrap"><table class="cmp"><colgroup>${cols}</colgroup><thead><tr>${head}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`
+    + (missingAgents.length ? `<p class="cmp-foot">${esc(t('m.missing', { list: missingAgents.map((a) => a.label).join(', ') }))}</p>` : '');
 }
 $('agents').addEventListener('click', (e) => {
   if (e.target.closest('[data-tip]') && e.target.closest('td:last-child')) return;
@@ -1912,7 +2455,7 @@ function renderContext() {
     data-tip="${esc(t('ctx.seg', { name: s.name, n: fmt(listing(s)), u: s.uses30 }) + (isIdle(s) ? t('ctx.seg.idle') : '') + (s.dup ? t('ctx.seg.dup') : ''))}"></span>`;
   const track = (skills, extra = '') => `<div class="ctx-track${skills.length > 60 ? ' dense' : ''}">${extra}${skills.map(seg).join('')}</div>`;
   $('ctx').innerHTML = groups.length ? groups.map(({ a, common, commonTotal, projects }) => `<div class="ctx-agent">
-      <div class="ctx-agent-h"><i class="adot" style="--c:var(--ag-${a.id})"></i><b>${esc(a.label)}</b><span>${esc(t(`ag.src.${a.listingSource}`))}</span></div>
+      <div class="ctx-agent-h">${agentMark(a.id)}<b>${esc(a.label)}</b><span>${esc(t(`ag.src.${a.listingSource}`))}</span></div>
       ${common.length ? `<div class="ctx-row"><div class="ctx-label"><b>${esc(t('ctx.all'))}</b><span>${esc(t('ctx.all.sub'))}</span></div>
         ${track(common)}
         <div class="ctx-total num">${fmt(commonTotal)}<small>${esc(t('unit.tokens'))}</small></div></div>` : ''}
@@ -1931,15 +2474,22 @@ function setMetric(v) {
 function renderDaily() {
   const days = data.daily;
   const valueOf = (d, id) => (metric === 'tokens' ? (d.tokens?.[id]?.input ?? 0) + (d.tokens?.[id]?.output ?? 0) : d.byAgent?.[id] ?? 0);
-  const series = shownAgents().filter((a) => days.some((d) => valueOf(d, a.id)));
-  const totals = days.map((d) => sum(series, (a) => valueOf(d, a.id)));
+  const agents = shownAgents().filter((a) => days.some((d) => valueOf(d, a.id)));
+  // The four color agents stack on their own; any others share one gray "other" segment (the tooltip still names them).
+  const rest = agents.filter((a) => !COLOR_AGENTS.includes(a.id));
+  const series = [
+    ...agents.filter((a) => COLOR_AGENTS.includes(a.id)).map((a) => ({ label: a.label, members: [a.id], fill: `var(--ag-${a.id})`, mark: agentMark(a.id) })),
+    ...(rest.length ? [{ label: rest.length === 1 ? rest[0].label : t('daily.other'), members: rest.map((a) => a.id), fill: 'var(--ag-other)', mark: '<i class="adot" style="--c:var(--ag-other)"></i>' }] : []),
+  ];
+  const seriesValue = (d, s) => sum(s.members, (id) => valueOf(d, id));
+  const totals = days.map((d) => sum(series, (s) => seriesValue(d, s)));
   const total = sum(totals, (x) => x);
   const show = metric === 'tokens' ? compact : fmt;
   $('daily-title').textContent = t(`daily.title.${metric}`);
   $('daily-lead').textContent = t(`daily.lead.${metric}`);
-  // A legend whenever two or more agents share the chart; one series is named by the agent picker.
+  // A legend whenever two or more series share the chart; one series is named by the agent picker.
   $('daily-legend').innerHTML = series.length > 1
-    ? series.map((a) => `<span><i class="adot" style="--c:var(--ag-${a.id})"></i>${esc(a.label)} <b>${show(sum(days, (d) => valueOf(d, a.id)))}</b></span>`).join('') + `<span>${esc(t('daily.total'))} <b>${show(total)}</b></span>`
+    ? series.map((s) => `<span>${s.mark}${esc(s.label)} <b>${show(sum(days, (d) => seriesValue(d, s)))}</b></span>`).join('') + `<span>${esc(t('daily.total'))} <b>${show(total)}</b></span>`
     : series.length ? `<span>${esc(t('daily.total'))} <b>${show(total)}</b></span>` : '';
   if (!total) {
     $('daily').innerHTML = `<p class="empty">${esc(t('daily.empty'))}</p>`;
@@ -1955,17 +2505,17 @@ function renderDaily() {
   const bars = days.map((d, i) => {
     let cum = 0;
     const x = L + i * w + 2, bw = Math.max(2, w - 4);
-    const segs = series.map((a) => {
-      const v = valueOf(d, a.id);
+    const segs = series.map((s) => {
+      const v = seriesValue(d, s);
       if (!v) return '';
       const top = y(cum + v), bottom = y(cum);
       // A 2px surface gap between stacked segments.
       const gap = cum > 0 ? 2 : 0;
       cum += v;
       const h = Math.max(1, bottom - top - gap);
-      return `<rect x="${x}" y="${top}" width="${bw}" height="${h}" rx="2" style="fill:var(--ag-${a.id})"/>`;
+      return `<rect x="${x}" y="${top}" width="${bw}" height="${h}" rx="2" style="fill:${s.fill}"/>`;
     }).join('');
-    const lines = series.filter((a) => valueOf(d, a.id)).map((a) => `${a.label}: ${show(valueOf(d, a.id))}`);
+    const lines = agents.filter((a) => valueOf(d, a.id)).map((a) => `${a.label}: ${show(valueOf(d, a.id))}`);
     const tipText = `${dayDate(d.date)}\n${lines.join('\n')}${lines.length > 1 ? `\n${t('daily.total')}: ${show(totals[i])}` : ''}`;
     const hit = totals[i] ? `<rect class="hit" x="${L + i * w}" y="${T0}" width="${w}" height="${H - B - T0}" data-tip="${esc(tipText)}"/>` : '';
     return segs + hit;
@@ -2089,6 +2639,9 @@ function spark(daily, W = 64, H = 18) {
     ${daily.map((c, i) => c ? `<rect x="${i * w}" y="${H - (c / max) * H}" width="${Math.max(1, w - 0.6)}" height="${(c / max) * H}"/>` : '').join('')}</svg>`;
 }
 
+// The Invocation page opened on this skill, for agents it can change.
+const modeLink = (s) => (MODE_AGENT_IDS.includes(s.agent) && s.scope !== 'other' ? `#/modes/${s.agent}/${encodeURIComponent(s.name)}` : '');
+
 function row(s) {
   const id = rowId(s);
   const m = modeOf(s);
@@ -2100,7 +2653,9 @@ function row(s) {
   const cells = `<tr class="row${open ? ' open' : ''}" data-id="${esc(id)}" tabindex="0" aria-expanded="${open}">
     <td><div class="sk-name">${esc(s.name)}</div><div class="sk-sum">${esc(summary)}</div></td>
     <td><div class="origin-name">${esc(originLabel(o))}</div><div class="origin-loc">${agentFilter ? '' : agentTag(s.agent)}<span>${esc(whereOf(s))}</span></div></td>
-    <td data-label="${esc(t('col.mode'))}"><span class="mode" data-tip="${esc(m.text)}"><i class="dot ${m.dot}"></i>${esc(m.label)}</span></td>
+    <td data-label="${esc(t('col.mode'))}">${modeLink(s)
+      ? `<a class="mode" href="${esc(modeLink(s))}" data-tip="${esc(`${m.text}\n${t('policy.change')}`)}"><i class="dot ${m.dot}"></i><span>${esc(m.label)}</span></a>`
+      : `<span class="mode" data-tip="${esc(m.text)}"><i class="dot ${m.dot}"></i>${esc(m.label)}</span>`}</td>
     <td class="r" data-label="${esc(t('col.listing'))}"><span class="tok ${lst ? 'always' : 'zero'}">${lst ? fmt(lst) : '0'}${s.listingExact != null ? '*' : ''}</span></td>
     <td class="r" data-label="${esc(t('col.body'))}"><span class="tok ${s.path ? 'onuse' : 'zero'}">${s.path ? fmt(body(s)) + (s.bodyExact != null ? '*' : '') : '–'}</span></td>
     <td class="r" data-label="${esc(t('col.uses'))}"><span class="uses">${spark(s.daily)}<span class="tok ${s.uses30 ? '' : 'zero'}">${fmt(s.uses30)}</span></span>
@@ -2109,7 +2664,7 @@ function row(s) {
   </tr>`;
   if (!open) return cells;
   const projects = Object.entries(s.byProject).sort((a, b) => b[1] - a[1]).map(([p, n]) => t('dd.projectCalls', { p: esc(short(p) || p), n })).join(', ');
-  const policy = s.policy ? t(`policy.${s.policy}`) : '';
+  const policy = T[`policy.${s.policy}`] ? t(`policy.${s.policy}`) : '';
   const originLink = o.url ? `<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(originLabel(o))}</a>` : esc(originLabel(o));
   const via = originVia(o);
   return cells + `<tr class="detail"><td colspan="${COLS.length}"><div class="detail-body">
@@ -2123,7 +2678,7 @@ function row(s) {
       <dt>${esc(t('dt.origin'))}</dt><dd>${originLink}${via ? `<span class="sub">${esc(via)}</span>` : ''}</dd>
       <dt>${esc(t('dt.where'))}</dt><dd>${esc(whereOf(s))}${s.path ? `<div class="path">${esc(s.path)}</div>` : ''}${s.dup ? `<span class="sub">${esc(t('dd.dup'))}</span>` : ''}</dd>
       <dt>${esc(t('dt.category'))}</dt><dd>${esc(catLabel(s.category))}</dd>
-      <dt>${esc(t('dt.mode'))}</dt><dd>${esc(m.label)}. ${esc(m.text)}${policy ? `<span class="sub">${esc(policy)}</span>` : ''}</dd>
+      <dt>${esc(t('dt.mode'))}</dt><dd>${esc(m.label)}. ${esc(m.text)}${policy ? `<span class="sub">${esc(policy)}</span>` : ''}${modeLink(s) ? `<a class="sub" href="${esc(modeLink(s))}">${esc(t('policy.change'))}</a>` : ''}</dd>
       <dt>${esc(t('dt.calls'))}</dt><dd>${esc(t('dd.calls', { n: fmt(s.uses), m: fmt(s.byModel), u: fmt(s.byUser) }))}${projects ? `<span class="sub">${projects}</span>` : ''}</dd>
       <dt>${esc(t('dt.measured'))} <button class="info" data-pop="measured" aria-label="${esc(t('info.of', { x: t('dt.measured') }))}" aria-expanded="false">?</button></dt>
       <dd>${s.contextDelta != null ? t('dd.measured', { n: fmt(s.contextDelta) }) : esc(t('dd.noMeasure'))}</dd>
@@ -2253,8 +2808,1036 @@ function drawCostBars() {
   g.innerHTML = out;
 }
 
+// ---------- invocation page ----------
+// Each skill has a baseline (policy.json: what you decided) and an actual value (each agent's own settings file).
+// Changes are staged here; the server previews them, applies them (all files or none, backed up first), and can undo.
+const TOKEN = document.querySelector('meta[name="skill-dash-token"]')?.content ?? '';
+const M_VALUES = ['auto', 'manual', 'off'];
+const CAT_ORDER = ['plan', 'build', 'debug', 'review', 'test', 'ship', 'design', 'docs', 'data', 'research', 'work', 'agent', 'other'];
+const SKILL_DIRS = {
+  claude: '~/.claude/skills', codebuddy: '~/.codebuddy/skills', qwen: '~/.qwen/skills',
+  codex: '~/.codex/skills · ~/.agents/skills', zcode: '~/.agents/skills', kimi: '~/.agents/skills',
+};
+let boardStale = false;
+const M = {
+  data: null, loading: null, error: null,
+  view: saved.get('skill-dash-mview') === 'skill' ? 'skill' : 'agent',
+  agent: saved.get('skill-dash-magent') || 'claude',
+  scope: 'global', filter: 'all', q: '', focus: null,
+  selected: new Set(), lastIdx: null, fallback: 'skip',
+  // `${agent}\n${skill id}\n${scope}` → { agent, id, scope, kind: 'set'|'revert'|'adopt', value }
+  staged: new Map(), cartOpen: false,
+};
+
+// ----- vocabulary -----
+const MV = (v) => (T[`m.v.${v}`] ? t(`m.v.${v}`) : String(v ?? ''));
+const MVL = (v) => ({ auto: t('mode.on'), manual: t('mode.user-invocable-only'), off: t('mode.off'), 'name-only': t('mode.name-only') }[v] ?? t('m.v.inherit'));
+const mdot = (v) => `<i class="dot ${v === 'manual' ? 'onuse' : v === 'off' ? 'off' : 'always'}"></i>`;
+const mAgents = () => M.data?.agents ?? [];
+const mAgentBy = (id) => mAgents().find((a) => a.id === id);
+const mA = () => mAgentBy(M.agent) ?? mAgents()[0];
+const skillIn = (a, id) => a?.skills.find((s) => s.id === id);
+const skey = (a, s, scope) => `${a.id}\n${s.id}\n${scope}`;
+const homeDir = () => (M.data?.policyFile ?? '').replace(/\/\.claude\/skill-policy\/policy\.json$/i, '');
+const tilde = (f) => {
+  const h = homeDir();
+  return h && f && f.toLowerCase().startsWith(`${h.toLowerCase()}/`) ? `~${f.slice(h.length)}` : f ?? '';
+};
+// Home paths anywhere in a text (preview field names carry project paths), shortened to ~.
+const tildeIn = (text) => {
+  const h = homeDir();
+  if (!h || !text) return text ?? '';
+  const re = new RegExp(`${h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\//g, '[\\\\/]')}(?=[\\\\/])`, 'gi');
+  return text.replace(re, '~');
+};
+// Two projects with one folder name are told apart by their parent folder.
+const projName = (dir) => {
+  const base = short(dir);
+  return (M.data?.projects ?? []).filter((p) => p.name.toLowerCase() === base.toLowerCase()).length > 1 ? dir.split('/').slice(-2).join('/') : base;
+};
+const layerLabel = (a, layer) => t(layer === 'mine' ? 'm.scope.mine' : a.layers.length > 1 ? 'm.scope.team' : 'm.scope.file');
+const scopeLabel = (a, scope) => {
+  const { p, layer } = parseScope(scope);
+  if (layer === 'global') return t('m.sl.global');
+  return t(layer === 'mine' ? 'm.sl.mine' : a.layers.length > 1 ? 'm.sl.team' : 'm.sl.file', { p: projName(p) });
+};
+const whenText = (iso) => new Date(iso).toLocaleString(locale(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+// ----- values: a scope is 'global' or '<project dir>|mine' / '<project dir>|team' -----
+function parseScope(scope) {
+  if (scope === 'global') return { p: null, layer: 'global' };
+  const i = scope.lastIndexOf('|');
+  return { p: scope.slice(0, i), layer: scope.slice(i + 1) };
+}
+const polVal = (s, scope) => {
+  const { p, layer } = parseScope(scope);
+  return layer === 'global' ? s.policy.global : layer === 'mine' ? s.policy.mine[p] : undefined;
+};
+const actVal = (s, scope) => {
+  const { p, layer } = parseScope(scope);
+  return layer === 'global' ? s.actual.global : s.actual[layer]?.[p];
+};
+const isManaged = (s, scope) => polVal(s, scope) !== undefined;
+// Global "auto" means "no override": an upgrade that turns it off shows up as a difference.
+const drifted = (s, scope) => isManaged(s, scope) && polVal(s, scope) !== (scope === 'global' ? actVal(s, scope) ?? 'auto' : actVal(s, scope));
+// What the page shows as the current value: the baseline when there is one, otherwise the agent's file.
+const baseVal = (s, scope) => (isManaged(s, scope) ? polVal(s, scope) : actVal(s, scope));
+function cur(a, s, scope, withStaged = true) {
+  const c = withStaged && M.staged.get(skey(a, s, scope));
+  if (!c) return baseVal(s, scope);
+  return c.value === 'inherit' ? undefined : c.value;
+}
+const defaultOf = (s) => (s.fm ? 'manual' : 'auto');
+function clamp(s, v) {
+  if (s.plugin) return s.pluginOn ? defaultOf(s) : 'off';
+  if (s.lock === 'hard') return 'off';
+  if (s.lock === 'managed') return s.lockValue;
+  if (s.fm && (v === 'auto' || v === 'name-only')) return 'manual';
+  return v;
+}
+// Only me > team > global > the skill's own default.
+function effective(a, s, p, withStaged = true) {
+  const g = cur(a, s, 'global', withStaged);
+  if (!p) return clamp(s, g ?? defaultOf(s));
+  return clamp(s, cur(a, s, `${p}|mine`, withStaged) ?? cur(a, s, `${p}|team`, withStaged) ?? g ?? defaultOf(s));
+}
+function inherited(a, s, scope) {
+  const { p, layer } = parseScope(scope);
+  if (layer === 'mine') return clamp(s, cur(a, s, `${p}|team`) ?? cur(a, s, 'global') ?? defaultOf(s));
+  return clamp(s, cur(a, s, 'global') ?? defaultOf(s));
+}
+const applies = (s, p) => !p || !s.only || s.only.some((x) => x.toLowerCase() === p.toLowerCase());
+const tokensFor = (a, p, withStaged) => sum(a.skills.filter((s) => (p ? applies(s, p) : !s.only)), (s) => (effective(a, s, p, withStaged) === 'auto' ? s.tokens : 0));
+
+// Project exceptions of one skill: values in its project files, baseline only-me values, and staged ones.
+function exceptions(a, s, withStaged = true) {
+  if (a.readOnly) return [];
+  const scopes = new Set();
+  for (const layer of a.layers) for (const p of Object.keys(s.actual[layer] ?? {})) scopes.add(`${p}|${layer}`);
+  if (a.layers.includes('mine')) for (const p of Object.keys(s.policy.mine)) scopes.add(`${p}|mine`);
+  if (withStaged) for (const c of M.staged.values()) if (c.agent === a.id && c.id === s.id && c.scope !== 'global') scopes.add(c.scope);
+  const out = [];
+  for (const scope of scopes) {
+    const { p, layer } = parseScope(scope);
+    const val = cur(a, s, scope, withStaged);
+    const staged = withStaged && M.staged.has(skey(a, s, scope));
+    if (val !== undefined || staged) out.push({ p, layer, scope, val, staged });
+  }
+  return out.sort((x, y) => projName(x.p).localeCompare(projName(y.p), locale()) || (x.layer === 'mine' ? -1 : 1));
+}
+
+// Why a value cannot be chosen here ('' when it can).
+function whyNot(a, s, scope, value) {
+  if (a.readOnly) return t(`m.why.ro.${a.readOnly}`, { a: a.label });
+  if (s.plugin) return t('m.why.plugin');
+  if (s.lock === 'managed') return t('m.why.managed', { v: MVL(s.lockValue) });
+  if (s.lock === 'hard') return t('m.why.hard');
+  const { p, layer } = parseScope(scope);
+  if (p && !applies(s, p)) return t('m.why.notInProject', { p: projName(p) });
+  if (layer !== 'global' && !a.layers.includes(layer)) return t('m.why.layer');
+  if (value === 'inherit') return layer === 'global' ? t('m.why.inheritGlobal') : '';
+  if (!a.modes.includes(value)) return whyValue(a);
+  if (value === 'auto' && s.fm) return t('m.why.fm');
+  return '';
+}
+const whyValue = (a) => (T[`m.why.value.${a.id}`] ? t(`m.why.value.${a.id}`) : t('m.why.value'));
+
+function stage(a, s, scope, change) {
+  const k = skey(a, s, scope);
+  const entry = { agent: a.id, id: s.id, scope, ...change };
+  if (change.kind === 'set') {
+    const { layer } = parseScope(scope);
+    const before = baseVal(s, scope);
+    const target = change.value === 'inherit' ? undefined : change.value;
+    // Choosing the value it already has only matters when it makes an unmanaged value managed.
+    const same = layer === 'global' ? (before ?? 'auto') === target && isManaged(s, scope)
+      : before === target && (layer !== 'mine' || target === undefined || isManaged(s, scope));
+    if (same && !drifted(s, scope)) {
+      M.staged.delete(k);
+      return true;
+    }
+  }
+  if (change.kind === 'revert') entry.value = polVal(s, scope) ?? 'inherit';
+  if (change.kind === 'adopt') entry.value = actVal(s, scope) ?? (scope === 'global' ? 'auto' : 'inherit');
+  M.staged.set(k, entry);
+  return true;
+}
+const trySet = (a, s, scope, value) => !whyNot(a, s, scope, value) && stage(a, s, scope, { kind: 'set', value });
+
+const driftScopes = (a, s) => (a.readOnly || s.plugin || s.lock ? []
+  : ['global', ...Object.keys(s.policy.mine).map((p) => `${p}|mine`)].filter((sc) => drifted(s, sc)));
+const isDrift = (a, s) => driftScopes(a, s).length > 0;
+const isPending = (a, s) => [...M.staged.values()].some((c) => c.agent === a.id && c.id === s.id);
+const hasExc = (a, s) => exceptions(a, s).length > 0;
+const isLocked = (a, s) => !!(a.readOnly || s.plugin || s.lock || s.fm);
+// Needs call history: an agent without transcripts would make every skill look unused.
+const mIdle = (a, s) => a.transcripts > 0 && !a.noLogs && !a.readOnly && !s.plugin && !s.lock && !s.only
+  && s.uses30 === 0 && s.tokens > 0 && effective(a, s, null, false) === 'auto';
+const teamDirtyFor = (a) => (a.files.team ? (M.data?.teamDirty ?? []).filter((f) => f.toLowerCase().endsWith(`/${a.files.team.toLowerCase()}`)) : []);
+function stagedFiles() {
+  const files = new Set();
+  for (const c of M.staged.values()) {
+    const { p, layer } = parseScope(c.scope);
+    if (c.kind !== 'revert' && layer !== 'team') files.add('policy');
+    if (c.kind !== 'adopt') files.add(`${c.agent}|${layer}|${p ?? ''}`);
+  }
+  return files.size;
+}
+
+// ----- server -----
+async function mApi(path, body) {
+  const headers = { 'X-Skill-Dash-Token': TOKEN };
+  const init = body === undefined ? { headers } : { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+  const r = await fetch(path, init);
+  let j = {};
+  try {
+    j = await r.json();
+  } catch {
+    /* not JSON: keep the status text */
+  }
+  if (!r.ok) throw Object.assign(new Error(j.error || r.statusText || String(r.status)), { status: r.status, code: j.code, file: j.file, files: j.files, rejected: j.rejected });
+  return j;
+}
+function loadModes(refresh = false) {
+  M.loading ??= mApi(`/api/modes${refresh ? '?refresh=1' : ''}`)
+    .then((j) => {
+      M.data = j;
+      M.error = null;
+      // Staged changes survive a reload as long as their skill is still there.
+      for (const [k, c] of M.staged) if (!skillIn(mAgentBy(c.agent), c.id)) M.staged.delete(k);
+    })
+    .catch((e) => { M.error = e; })
+    .finally(() => {
+      M.loading = null;
+      renderModes();
+    });
+  renderModes();
+  return M.loading;
+}
+// From the router. With an agent (and skill name), opens that agent filtered to the skill.
+function showModes(agentId, name) {
+  if (agentId) {
+    Object.assign(M, { view: 'agent', agent: agentId, scope: 'global', filter: 'all', q: name ?? '', focus: name ? { agent: agentId, name } : null });
+    M.selected.clear();
+  }
+  if (!M.data && !M.loading) loadModes();
+  else renderModes();
+}
+
+// ----- rendering -----
+function renderModes() {
+  renderModeViews();
+  renderModeSummary();
+  if (!M.data) {
+    $('m-main').innerHTML = M.error
+      ? `<div class="empty-state"><b>${M.error.status === 403 ? t('m.err.token') : esc(t('m.fail', { msg: M.error.message }))}</b><button class="btn" data-m-reload>${esc(t('btn.refresh'))}</button></div>`
+      : `<p class="empty">${esc(t('m.loading'))}</p><div class="skel"></div><div class="skel"></div><div class="skel"></div>`;
+    $('m-cart').innerHTML = `<h2>${esc(t('m.cart'))}</h2>`;
+    $('m-dock').innerHTML = '';
+    return;
+  }
+  if (M.view === 'agent') renderModeAgent();
+  else renderModeCross();
+  renderCart();
+  if (M.focus) requestAnimationFrame(focusSkill);
+}
+function focusSkill() {
+  const a = mA();
+  const s = M.focus && a?.id === M.focus.agent ? a.skills.find((x) => x.name === M.focus.name) : null;
+  M.focus = null;
+  const row = s && document.querySelector(`[data-m-row="${CSS.escape(s.id)}"]`);
+  if (!row) return;
+  row.scrollIntoView({ block: 'center' });
+  row.querySelector('.modeseg [tabindex="0"]')?.focus({ preventScroll: true });
+}
+
+function renderModeViews() {
+  for (const b of $('m-views').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.v === M.view));
+  const agents = mAgents();
+  const current = mA();
+  $('m-agents').hidden = M.view !== 'agent' || !agents.length;
+  $('m-agents').innerHTML = agents.map((a) => {
+    const pend = [...M.staged.values()].filter((c) => c.agent === a.id).length;
+    return `<button data-m-agent="${esc(a.id)}" aria-pressed="${a.id === current?.id}">${agentMark(a.id)}${esc(a.label)}<span class="n">${a.skills.length}</span>`
+      + `${a.readOnly ? `<span class="pill">${esc(t('m.pill.ro'))}</span>` : ''}${pend ? `<span class="pill accent">${esc(t('m.pill.pending', { n: pend }))}</span>` : ''}</button>`;
+  }).join('');
+  const missing = M.data?.missing ?? [];
+  $('m-missing').textContent = missing.length ? t('m.missing', { list: missing.map((m) => m.label).join(', ') }) : '';
+  if (missing.length) $('m-missing').setAttribute('data-tip', t('m.missing.tip'));
+  else $('m-missing').removeAttribute('data-tip');
+}
+
+function mcard(color, label, value, note, actions = '', info = '') {
+  return `<div class="stat"><div class="stat-label"><i class="key ${color}"></i>${esc(label)}${info}</div><div class="stat-value">${value}</div>
+    <div class="stat-note">${note}</div>${actions ? `<div class="stat-actions">${actions}</div>` : ''}</div>`;
+}
+function renderModeSummary() {
+  const labels = [['always', t('sum.fixed')], ['ink', t('m.sum.pending')], ['warn', t('m.sum.drift')], ['onuse', t('m.sum.exc')]];
+  if (!M.data) {
+    $('m-summary').innerHTML = labels.map(([c, l]) => mcard(c, l, '<span class="num dim">…</span>', '')).join('');
+    return;
+  }
+  const scoped = M.view === 'agent' ? [mA()].filter(Boolean) : mAgents();
+  const writable = scoped.filter((a) => !a.readOnly);
+  const now = sum(writable, (a) => tokensFor(a, null, false));
+  const next = sum(writable, (a) => tokensFor(a, null, true));
+  const unit = `<span class="unit">${esc(t('unit.tokens'))}</span>`;
+  const tok = now === next ? `<span class="num">${fmt(now)}</span>${unit}`
+    : `<span class="from" data-tip="${esc(t('m.sum.fixed.after'))}">${fmt(now)}</span><span class="num">${fmt(next)}</span>${unit}<span class="delta ${next < now ? 'down' : 'up'}">${next < now ? '−' : '+'}${fmt(Math.abs(now - next))}</span>`;
+  const drift = scoped.flatMap((a) => a.skills.filter((s) => isDrift(a, s)));
+  const excs = scoped.flatMap((a) => a.skills.flatMap((s) => exceptions(a, s, false)));
+  const dirty = scoped.flatMap(teamDirtyFor);
+  const info = `<button class="info" data-pop="baseline" aria-label="${esc(t('info.of', { x: t('i.baseline.t') }))}" aria-expanded="false">?</button>`;
+  const driftActs = drift.length ? ['view', 'revert', 'adopt'].map((k) => `<button class="link" data-m-drift="${k}">${esc(t(`m.drift.${k}`))}</button>`).join('') : '';
+  $('m-summary').innerHTML = [
+    mcard('always', labels[0][1], tok, esc(M.view === 'agent' ? t('m.sum.fixed.agent', { a: mA()?.label ?? '' }) : t('m.sum.fixed.all'))),
+    mcard('ink', labels[1][1], `<span class="num">${fmt(M.staged.size)}</span><span class="unit">${esc(t('unit.changes'))}</span>`,
+      esc(M.staged.size ? t('m.sum.pending.some', { n: stagedFiles() }) : t('m.sum.pending.none'))),
+    mcard('warn', labels[2][1], `<span class="num">${fmt(drift.length)}</span><span class="unit">${esc(t('unit.skills'))}</span>`,
+      esc(drift.length ? t('m.sum.drift.some') : t('m.sum.drift.none')), driftActs, info),
+    mcard('onuse', labels[3][1], `<span class="num">${fmt(excs.length)}</span><span class="unit">${esc(t('unit.count'))}</span>`,
+      esc(t('m.sum.exc.note', { m: excs.filter((e) => e.layer === 'mine').length, t: excs.filter((e) => e.layer === 'team').length }))
+      + (dirty.length ? ` · <b style="color:var(--accent)">${esc(t('m.sum.exc.dirty', { n: dirty.length }))}</b>` : '')),
+  ].join('');
+}
+
+// --- by agent ---
+const M_FILTERS = [['all', () => true], ['idle', mIdle], ['exc', hasExc], ['drift', isDrift], ['pending', isPending], ['locked', isLocked]];
+function mVisible(a) {
+  const f = (M_FILTERS.find((x) => x[0] === M.filter) ?? M_FILTERS[0])[1];
+  const q = M.q.trim().toLowerCase();
+  return a.skills.filter((s) => f(a, s) && (!q || [s.name, s.summary, originLabel(s.origin), s.path].some((v) => (v ?? '').toLowerCase().includes(q))));
+}
+const searchHtml = () => `<label class="search"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`
+  + `<input type="search" id="m-q" value="${esc(M.q)}" placeholder="${esc(t('led.search'))}" aria-label="${esc(t('led.search.aria'))}"></label>`;
+
+function statusPills(a) {
+  if (a.noLogs) return `<span class="pill" data-tip="${esc(t('m.status.notread.tip'))}" tabindex="0">${esc(t('m.status.notread'))}</span>`;
+  if (!a.transcripts) return `<span class="pill warn" data-tip="${esc(t('m.status.nologs.tip'))}" tabindex="0">${esc(t('m.status.nologs'))}</span>`;
+  return '';
+}
+function capsHtml(a) {
+  if (a.readOnly === 'kimi') return '';
+  const layers = a.trial ? 'm.caps.trial' : a.layers.length > 1 ? 'm.caps.both' : a.layers.length ? 'm.caps.team' : 'm.caps.none';
+  return [`<span>${esc(t('m.caps.values'))}: <b>${esc(a.modes.map(MV).join(' · '))}</b></span>`, `<span>${esc(t(layers))}</span>`,
+    `<span>${esc(t(a.key === 'path' ? 'm.caps.path' : 'm.caps.name'))}</span>`, a.id === 'qwen' ? `<span>${esc(t('m.caps.qwen'))}</span>` : ''].join('');
+}
+function scopebarHtml(a) {
+  const opts = [`<option value="global"${M.scope === 'global' ? ' selected' : ''}>${esc(t('m.scope.global'))}</option>`];
+  if (a.layers.length) {
+    for (const pr of M.data.projects) {
+      opts.push(`<optgroup label="${esc(projName(pr.dir))}">${a.layers.map((l) => {
+        const v = `${pr.dir}|${l}`;
+        return `<option value="${esc(v)}"${v === M.scope ? ' selected' : ''}>${esc(projName(pr.dir))} · ${esc(layerLabel(a, l))}</option>`;
+      }).join('')}</optgroup>`);
+    }
+  }
+  const { p, layer } = parseScope(M.scope);
+  const file = (f) => `<code>${esc(tilde(f))}</code>`;
+  const desc = layer === 'global' ? `${esc(t('m.scope.desc.global'))} · ${file(a.files.global)}`
+    : layer === 'mine' ? `${esc(t('m.scope.desc.mine', { p: projName(p) }))} · ${file(`${p}/${a.files.mine}`)}`
+      : `${esc(t(a.layers.length > 1 ? 'm.scope.desc.team' : 'm.scope.desc.file'))} · ${file(`${p}/${a.files.team}`)}`;
+  return `<div class="scopebar"><label for="m-scope">${esc(t('m.scope'))}</label><select id="m-scope"${a.layers.length ? '' : ' disabled'}>${opts.join('')}</select><div class="scope-desc">${desc}</div></div>`;
+}
+function noticesHtml(a) {
+  const out = (a.problems ?? []).map((pr) => `<div class="mnote warn"><span>${t(`m.n.problem.${pr.code}`, { f: esc(tilde(pr.file)), m: esc(pr.message) })}</span></div>`);
+  const drift = a.skills.filter((s) => isDrift(a, s));
+  if (drift.length && !drift.every((s) => isPending(a, s))) {
+    out.push(`<div class="mnote warn"><span>${t('m.n.drift', { n: drift.length })}</span><span class="acts">${['view', 'revert', 'adopt'].map((k) => `<button class="btn" data-m-drift="${k}">${esc(t(`m.drift.${k}`))}</button>`).join('')}</span></div>`);
+  }
+  const dirty = teamDirtyFor(a);
+  if (dirty.length) {
+    out.push(`<div class="mnote team"><span>${t('m.n.team', { n: dirty.length })} ${dirty.map((f) => `<code>${esc(tilde(f))}</code>`).join(' ')}</span>`
+      + `<span class="acts"><button class="btn" data-m-copygit="${esc(a.id)}">${esc(t('m.n.copyGit'))}</button></span></div>`);
+  }
+  if (a.trial) out.push(`<div class="mnote ro"><span>${t('m.n.trial')}</span></div>`);
+  return out.join('');
+}
+function recsHtml(a) {
+  const out = [];
+  const to = a.modes.includes('manual') ? 'manual' : 'off';
+  const idle = a.skills.filter((s) => mIdle(a, s) && !M.staged.has(skey(a, s, 'global')));
+  const saves = (list) => fmt(sum(list.filter((s) => !s.only), (s) => s.tokens));
+  if (idle.length) out.push(`<button class="rec" data-m-rec="idle" data-tip="${esc(t('m.rec.tip', { t: saves(idle) }))}">${esc(t('m.rec.idle', { n: idle.length, v: MV(to) }))}<span class="rtok">−${saves(idle)}</span></button>`);
+  const extra = a.skills.filter((s) => s.extra && effective(a, s, null) !== 'off' && !whyNot(a, s, 'global', 'off'));
+  if (extra.length) out.push(`<button class="rec" data-m-rec="dup" data-tip="${esc(t('m.rec.tip', { t: saves(extra) }))}">${esc(t('m.rec.dup', { n: extra.length }))}<span class="rtok">−${saves(extra)}</span></button>`);
+  return out.length ? `<div class="recs"><span>${esc(t('m.recs'))}</span>${out.join('')}</div>` : '';
+}
+function toolbarAgent(a, rows) {
+  const filters = M_FILTERS.map(([id, f]) => `<button data-m-filter="${id}" aria-pressed="${M.filter === id}">${esc(t(`m.f.${id}`))}${id === 'all' ? '' : `<span class="n">${a.skills.filter((s) => f(a, s)).length}</span>`}</button>`).join('');
+  return `<div class="toolbar m-toolbar">${searchHtml()}<div class="seg-ctl" role="group" aria-label="${esc(t('m.f.aria'))}">${filters}</div>`
+    + `<span class="count">${esc(t('led.count', { n: fmt(rows.length), t: fmt(a.skills.length) }))}</span></div>`;
+}
+function selbarAgent(a, n) {
+  const values = [...(M.scope === 'global' ? [] : ['inherit']), ...M_VALUES];
+  const btns = values.map((v) => {
+    const why = v === 'inherit' || a.modes.includes(v) ? '' : whyValue(a);
+    return `<button class="btn" data-m-bulk="${v}"${why ? ` aria-disabled="true" data-tip="${esc(why)}"` : ''}>${v === 'inherit' ? '' : mdot(v)}${esc(MV(v))}</button>`;
+  }).join('');
+  return `<div class="selbar" role="region" aria-label="${esc(t('m.sel.aria'))}"><span><b>${esc(t('m.sel.n', { n }))}</b> <span class="scope-note">· ${esc(t('m.sel.scope', { s: scopeLabel(a, M.scope) }))}</span></span>`
+    + `<span class="btns">${btns}<button class="btn" data-m-clear>${esc(t('m.sel.clear'))}</button></span></div>`;
+}
+function renderModeAgent() {
+  const a = mA();
+  if (!a) {
+    $('m-main').innerHTML = `<div class="empty-state"><b>${esc(t('m.empty'))}</b></div>`;
+    return;
+  }
+  const { p, layer } = parseScope(M.scope);
+  if (M.scope !== 'global' && (!a.layers.includes(layer) || !M.data.projects.some((x) => x.dir === p))) M.scope = 'global';
+  const rows = mVisible(a);
+  const head = `<div class="agent-head"><h2>${agentTag(a.id, a.label)}</h2>${statusPills(a)}</div><div class="caps">${capsHtml(a)}</div>`;
+  if (a.readOnly) {
+    $('m-main').innerHTML = `${head}<div class="mnote ro"><span>🔒 ${esc(t(`m.why.ro.${a.readOnly}`, { a: a.label }))}</span></div>${groupsHtml(a, rows)}`;
+    return;
+  }
+  const sel = [...M.selected].filter((id) => skillIn(a, id)).length;
+  $('m-main').innerHTML = `${head}${scopebarHtml(a)}${noticesHtml(a)}${recsHtml(a)}${sel ? selbarAgent(a, sel) : toolbarAgent(a, rows)}${groupsHtml(a, rows)}`;
+}
+function groupsHtml(a, rows) {
+  M.rowOrder = [];
+  if (!a.skills.length) return `<div class="empty-state"><b>${esc(t('m.empty'))}</b><span>${esc(t('m.empty.hint', { dirs: SKILL_DIRS[a.id] ?? '' }))}</span></div>`;
+  if (!rows.length) return `<div class="empty-state"><b>${esc(t('led.empty'))}</b><button class="btn" data-m-reset>${esc(t('led.reset'))}</button></div>`;
+  const by = new Map();
+  for (const s of rows) by.set(s.category, [...(by.get(s.category) ?? []), s]);
+  const order = [...(data?.categories ?? CAT_ORDER), ...by.keys()].filter((c, i, all) => by.has(c) && all.indexOf(c) === i);
+  const { p } = parseScope(M.scope);
+  return order.map((cat) => {
+    const list = by.get(cat).sort((x, y) => x.name.localeCompare(y.name) || (x.path ?? '').localeCompare(y.path ?? ''));
+    const allSel = list.every((s) => M.selected.has(s.id));
+    const tok = sum(list.filter((s) => (p ? applies(s, p) : !s.only)), (s) => (effective(a, s, p) === 'auto' ? s.tokens : 0));
+    const closed = saved.get(`skill-dash-mclosed:${cat}`) === '1';
+    const rowsHtml = list.map((s) => {
+      M.rowOrder.push(s.id);
+      return mRow(a, s, M.rowOrder.length - 1);
+    }).join('');
+    return `<details class="group" data-mkey="${esc(cat)}"${closed ? '' : ' open'}><summary>
+      <svg class="caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ${a.readOnly ? '' : `<input type="checkbox" class="gsel" data-m-gsel="${esc(cat)}"${allSel ? ' checked' : ''} aria-label="${esc(t('m.gsel', { g: catLabel(cat) }))}">`}
+      <h3>${esc(catLabel(cat))}</h3><span class="hint">${esc(catHint(cat))}</span>
+      <span class="facts"><span>${t('grp.count', { n: list.length })}</span><span>${t('grp.tokens', { n: fmt(tok) })}</span></span></summary>
+      <div class="rows">${rowsHtml}</div></details>`;
+  }).join('');
+}
+function flagsHtml(a, s) {
+  const soft = (label, tipKey) => `<span class="flag soft"${tipKey ? ` data-tip="${esc(t(tipKey))}"` : ''}>${esc(t(label))}</span>`;
+  return [
+    mIdle(a, s) ? `<span class="flag">${esc(t('row.flag.idle'))}</span>` : '',
+    isDrift(a, s) ? `<span class="flag">${esc(t('m.flag.drift'))}</span>` : '',
+    s.extra ? soft('m.flag.extra', 'm.flag.extra.tip') : s.dup ? soft('row.flag.dup') : '',
+    s.shared ? soft('m.flag.shared', 'm.flag.shared.tip') : '',
+    s.fm ? soft('m.flag.fm', 'm.flag.fm.tip') : '',
+    s.plugin ? soft('m.flag.plugin', 'm.why.plugin') : '',
+  ].join('');
+}
+function modeSeg(a, s) {
+  const scope = M.scope;
+  const { p, layer } = parseScope(scope);
+  if (p && !applies(s, p)) return `<span class="na" data-tip="${esc(t('m.why.notInProject', { p: projName(p) }))}">${esc(t('m.row.notHere'))}</span>`;
+  const locked = !!(a.readOnly || s.plugin || s.lock);
+  const val = cur(a, s, scope);
+  const shown = locked ? effective(a, s, p) : layer === 'global' ? val ?? defaultOf(s) : val ?? 'inherit';
+  const pending = M.staged.has(skey(a, s, scope));
+  const drift = !pending && drifted(s, scope);
+  const opts = [...(layer === 'global' ? [] : ['inherit']), ...M_VALUES];
+  const before = pending ? (layer === 'global' ? baseVal(s, scope) ?? defaultOf(s) : baseVal(s, scope) ?? 'inherit') : null;
+  const unmanaged = !pending && layer !== 'team' && !isManaged(s, scope) && actVal(s, scope) !== undefined;
+  const tip = [
+    drift ? t('m.tip.drift', { b: MVL(polVal(s, scope)), a: MVL(actVal(s, scope) ?? (layer === 'global' ? 'auto' : undefined)) }) : '',
+    pending ? t('m.tip.pending', { b: MVL(before), a: MVL(shown) }) : '',
+    unmanaged ? t('m.tip.unmanaged') : '',
+  ].filter(Boolean).join('\n');
+  const label = (o) => (o === 'inherit' ? `${esc(MV('inherit'))} <span class="sub">${esc(MV(inherited(a, s, scope)))}</span>` : `${mdot(o)}${esc(MV(o))}`);
+  const focusable = opts.includes(shown) ? shown : opts[0];
+  return `<div class="modeseg${pending ? ' pending' : ''}${drift ? ' drift' : ''}${locked ? ' locked' : ''}" role="radiogroup" aria-label="${esc(t('m.seg.aria', { s: s.name }))}" data-m-seg="${esc(s.id)}"${tip ? ` data-tip="${esc(tip)}"` : ''}>
+    ${locked ? `<span class="lock" aria-hidden="true" data-tip="${esc(whyNot(a, s, scope, 'auto'))}">🔒</span>` : ''}${opts.map((o) => {
+      const why = whyNot(a, s, scope, o);
+      return `<button role="radio" aria-checked="${o === shown}" tabindex="${o === focusable ? 0 : -1}" data-m-set="${o}"${o === 'inherit' ? ' class="inh"' : ''}${why ? ` aria-disabled="true" data-tip="${esc(why)}"` : ''}>${label(o)}</button>`;
+    }).join('')}</div>`;
+}
+function chipsHtml(a, s) {
+  if (a.readOnly) return '';
+  const dirty = teamDirtyFor(a).map((f) => f.toLowerCase());
+  return exceptions(a, s).filter((e) => e.scope !== M.scope).map((e) => {
+    const drift = !e.staged && drifted(s, e.scope);
+    const unmanaged = e.layer === 'mine' && !e.staged && !isManaged(s, e.scope);
+    const isDirty = e.layer === 'team' && dirty.includes(`${e.p}/${a.files.team}`.toLowerCase());
+    const val = e.val === undefined ? `${MV('inherit')} (${MV(inherited(a, s, e.scope))})` : MV(e.val);
+    const layerWord = t(e.layer === 'mine' ? 'm.x.mine' : a.layers.length > 1 ? 'm.x.team' : 'm.scope.file');
+    const tips = [unmanaged ? t('m.tip.unmanaged') : '', drift ? t('m.tip.drift', { b: MVL(polVal(s, e.scope)), a: MVL(actVal(s, e.scope)) }) : '', isDirty ? t('m.tip.dirty') : ''].filter(Boolean).join('\n');
+    return `<button class="xchip${e.layer === 'team' ? ' team' : ''}${e.staged ? ' pending' : ''}${drift ? ' drift' : ''}${unmanaged ? ' unmanaged' : ''}${isDirty ? ' dirty' : ''}" data-m-exc="${esc(s.id)}" data-scope="${esc(e.scope)}" aria-haspopup="dialog"${tips ? ` data-tip="${esc(tips)}"` : ''}>`
+      + `${mdot(e.val ?? inherited(a, s, e.scope))}${esc(projName(e.p))} ${esc(val)} <span class="layer">· ${esc(layerWord)}</span></button>`;
+  }).join('');
+}
+const addExcHtml = (a, s) => (!a.readOnly && !s.plugin && !s.lock && a.layers.length && M.data.projects.some((pr) => applies(s, pr.dir))
+  ? `<button class="xadd" data-m-exc="${esc(s.id)}" data-scope="" aria-haspopup="dialog" aria-label="${esc(t('m.add.aria', { s: s.name }))}">${esc(t('m.add'))}</button>` : '');
+function mRow(a, s, i) {
+  const { p } = parseScope(M.scope);
+  const tok = applies(s, p) && effective(a, s, p) === 'auto' ? s.tokens : 0;
+  const chips = chipsHtml(a, s);
+  const src = originLabel(s.origin);
+  const sel = M.selected.has(s.id);
+  return `<div class="srow${sel ? ' sel' : ''}" data-m-row="${esc(s.id)}">
+    <input type="checkbox" data-m-sel="${esc(s.id)}" data-i="${i}"${sel ? ' checked' : ''} aria-label="${esc(t('m.rsel', { n: s.name }))}"${a.readOnly ? ' disabled' : ''}>
+    <div><div class="sk-name">${esc(s.name)}${flagsHtml(a, s)}</div><div class="sk-sum">${esc(s.summary || t('row.noDesc'))}</div>
+      <div class="sk-meta">${src ? `<span>${esc(src)}</span>` : ''}${s.only ? `<span>${esc(t('m.row.only', { p: s.only.map(projName).join(', ') }))}</span>` : ''}`
+      + `${a.key === 'path' ? `<span class="path">${esc(tilde(s.path))}</span>` : ''}${a.transcripts && !a.noLogs ? `<span>${esc(t('m.row.uses', { n: fmt(s.uses30) }))}</span>` : ''}${addExcHtml(a, s)}</div></div>
+    <div class="mtok ${tok ? 'always' : 'zero'}" data-tip="${esc(t('col.listing.tip'))}">${fmt(tok)}<small>${esc(t('m.row.perReq'))}</small></div>
+    ${modeSeg(a, s)}
+    ${chips ? `<div class="extras">${chips}</div>` : ''}
+  </div>`;
+}
+
+// --- by skill · all agents ---
+function crossRows() {
+  const names = new Map();
+  for (const a of mAgents()) {
+    for (const s of a.skills) {
+      let r = names.get(s.name);
+      if (!r) names.set(s.name, (r = { name: s.name, summary: s.summary, shared: false, per: {} }));
+      r.summary ||= s.summary;
+      r.shared ||= !!s.shared;
+      (r.per[a.id] ??= []).push(s);
+    }
+  }
+  const q = M.q.trim().toLowerCase();
+  return [...names.values()]
+    .filter((r) => !q || r.name.toLowerCase().includes(q) || (r.summary ?? '').toLowerCase().includes(q))
+    .filter((r) => M.filter !== 'multi' || Object.keys(r.per).length > 1)
+    .filter((r) => M.filter !== 'shared' || r.shared)
+    .filter((r) => M.filter !== 'pending' || Object.entries(r.per).some(([id, list]) => list.some((s) => isPending(mAgentBy(id), s))))
+    .sort((x, y) => Object.keys(y.per).length - Object.keys(x.per).length || x.name.localeCompare(y.name));
+}
+function crossCell(a, r) {
+  const copies = r.per[a.id];
+  if (!copies) return `<span class="na" data-tip="${esc(t('m.xc.none'))}">—</span>`;
+  const s = copies[0];
+  const eff = effective(a, s, null);
+  const pending = copies.some((c) => M.staged.has(skey(a, c, 'global')));
+  const drift = copies.some((c) => drifted(c, 'global'));
+  const locked = !!(a.readOnly || s.plugin || s.lock);
+  return `<button class="xcell${pending ? ' pending' : ''}${drift ? ' drift' : ''}${locked ? ' locked' : ''}" data-m-xagent="${esc(a.id)}" data-m-xname="${esc(r.name)}" aria-haspopup="dialog" aria-label="${esc(`${r.name}, ${a.label}: ${MVL(eff)}`)}"${locked ? ` data-tip="${esc(whyNot(a, s, 'global', 'auto'))}"` : ''}>`
+    + `${locked ? '🔒 ' : ''}${mdot(eff)}${esc(MV(eff))}${copies.length > 1 ? `<span class="copies">×${copies.length}</span>` : ''}</button>`;
+}
+function renderModeCross() {
+  const rows = crossRows();
+  const shownNames = new Set(rows.map((r) => r.name));
+  const n = [...M.selected].filter((x) => shownNames.has(x)).length;
+  const cols = mAgents();
+  const noManual = cols.filter((a) => !a.readOnly && !a.modes.includes('manual')).map((a) => a.label).join(' · ');
+  const toolbar = n
+    ? `<div class="selbar" role="region" aria-label="${esc(t('m.sel.aria'))}"><span><b>${esc(t('m.sel.n', { n }))}</b> <span class="scope-note">· ${esc(t('m.sel.allAgents'))}</span></span>
+        <span class="btns">${M_VALUES.map((v) => `<button class="btn" data-m-xbulk="${v}">${mdot(v)}${esc(MV(v))}</button>`).join('')}<button class="btn" data-m-clear>${esc(t('m.sel.clear'))}</button></span>
+        ${noManual ? `<span class="fallback" role="radiogroup" aria-label="${esc(t('m.fb', { list: noManual }))}">${esc(t('m.fb', { list: noManual }))}
+          <label><input type="radio" name="m-fb" value="skip"${M.fallback === 'skip' ? ' checked' : ''}> ${esc(t('m.fb.skip'))}</label>
+          <label><input type="radio" name="m-fb" value="off"${M.fallback === 'off' ? ' checked' : ''}> ${esc(t('m.fb.off'))}</label></span>` : ''}</div>`
+    : `<div class="toolbar m-toolbar">${searchHtml()}<div class="seg-ctl" role="group" aria-label="${esc(t('m.f.aria'))}">${['all', 'multi', 'shared', 'pending'].map((id) => `<button data-m-filter="${id}" aria-pressed="${M.filter === id}">${esc(t(`m.f.${id}`))}</button>`).join('')}</div>`
+      + `<span class="count">${esc(t('m.xcount', { n: fmt(rows.length) }))}</span></div>`;
+  const allSel = rows.length > 0 && rows.every((r) => M.selected.has(r.name));
+  const table = `<div class="xtable-wrap"><table class="xt"><thead><tr><th class="first"><span class="xname"><input type="checkbox" class="gsel" id="m-xsel-all"${allSel ? ' checked' : ''} aria-label="${esc(t('m.selall'))}"> ${esc(t('col.name'))}</span></th>`
+    + `${cols.map((a) => `<th>${agentTag(a.id, a.label)}${a.readOnly ? `<br><span class="pill">${esc(t('m.pill.ro'))}</span>` : ''}</th>`).join('')}</tr></thead><tbody>`
+    + rows.map((r) => `<tr class="${M.selected.has(r.name) ? 'sel' : ''}"><td class="first"><div class="xname"><input type="checkbox" class="gsel" data-m-xsel="${esc(r.name)}"${M.selected.has(r.name) ? ' checked' : ''} aria-label="${esc(t('m.rsel', { n: r.name }))}">
+        <div><div class="sk-name">${esc(r.name)}${r.shared ? `<span class="flag soft" data-tip="${esc(t('m.flag.shared.tip'))}">${esc(t('m.flag.shared'))}</span>` : ''}</div><div class="sk-sum">${esc(r.summary || '')}</div></div></div></td>`
+      + `${cols.map((a) => `<td>${crossCell(a, r)}</td>`).join('')}</tr>`).join('') + '</tbody></table></div>';
+  $('m-main').innerHTML = `<div class="agent-head"><h2>${esc(t('m.view.skill'))}</h2></div><p class="lead" style="margin:6px 0 4px">${esc(t('m.xc.lead'))}</p>${toolbar}`
+    + (rows.length ? table : `<div class="empty-state"><b>${esc(t('led.empty'))}</b><button class="btn" data-m-reset>${esc(t('led.reset'))}</button></div>`);
+}
+
+// --- change list ---
+function describe(a, s, c) {
+  const lab = (v) => (v === undefined || v === 'inherit' ? esc(MV('inherit')) : `${mdot(v)}${esc(MV(v))}`);
+  const g = c.scope === 'global';
+  if (c.kind === 'revert') return esc(t('m.cart.revert', { a: MV(actVal(s, c.scope) ?? (g ? 'auto' : 'inherit')), b: MV(polVal(s, c.scope) ?? 'inherit') }));
+  if (c.kind === 'adopt') return esc(t('m.cart.adopt', { b: MV(polVal(s, c.scope) ?? 'inherit'), a: MV(c.value) }));
+  return `${lab(g ? baseVal(s, c.scope) ?? defaultOf(s) : baseVal(s, c.scope))} → ${lab(c.value)}`;
+}
+function renderCart() {
+  const items = [...M.staged.entries()].map(([k, c]) => {
+    const a = mAgentBy(c.agent);
+    return { k, c, a, s: skillIn(a, c.id) };
+  }).filter((x) => x.s);
+  const byAgent = new Map();
+  for (const x of items) byAgent.set(x.a.id, [...(byAgent.get(x.a.id) ?? []), x]);
+  const n = items.length;
+  const deltas = [...byAgent.keys()].map((id) => {
+    const a = mAgentBy(id);
+    const now = tokensFor(a, null, false), next = tokensFor(a, null, true);
+    return `<div>${agentTag(a.id, a.label)}<span class="v">${now === next ? fmt(now) : `<s>${fmt(now)}</s> → <span class="${next < now ? 'down' : 'up'}">${fmt(next)}</span>`}</span></div>`;
+  }).join('');
+  const team = new Set(items.filter((x) => x.c.kind === 'set' && parseScope(x.c.scope).layer === 'team').map((x) => `${x.a.id}|${parseScope(x.c.scope).p}`));
+  const last = M.data?.lastApply;
+  const lastHtml = last ? `<div class="lastapply"><span>${esc(t('m.cart.last', { when: whenText(last.at), n: last.files }))}</span><button class="link" data-m-undo>${esc(t('m.undo'))}</button></div>` : '';
+  $('m-cart').innerHTML = `<h2>${esc(t('m.cart'))}${n ? ` <span class="n">${n}</span>` : ''}</h2>` + (n
+    ? `<div class="tokdelta"><span>${esc(t('m.cart.tokens'))}</span>${deltas}</div>`
+      + [...byAgent.entries()].map(([id, list]) => `<div class="cgroup"><b>${agentTag(id, mAgentBy(id).label)}</b>${list.map(({ k, c, a, s }) => `<div class="citem">`
+        + `<span class="what">${esc(s.name)}</span><span class="where">${esc(scopeLabel(a, c.scope))}</span><span class="chg">${describe(a, s, c)}</span>`
+        + `<button class="x" data-m-unstage="${esc(k)}" aria-label="${esc(t('m.cart.x', { s: s.name }))}">×</button></div>`).join('')}</div>`).join('')
+      + (team.size ? `<p class="cart-foot">${esc(t('m.cart.team', { n: team.size }))}</p>` : '')
+      + `<div class="cart-actions"><button class="btn" data-m-discard>${esc(t('m.cart.discard'))}</button><button class="btn primary" data-m-preview>${esc(t('m.cart.preview'))}</button></div>`
+    : `<p class="empty">${esc(t('m.cart.empty'))}</p><p class="cart-foot">${esc(t('m.cart.legend'))}</p>`) + lastHtml;
+  $('m-cart').classList.toggle('open', M.cartOpen && n > 0);
+  const now = sum(mAgents(), (a) => tokensFor(a, null, false)), next = sum(mAgents(), (a) => tokensFor(a, null, true));
+  $('m-dock').innerHTML = n
+    ? `<span class="sum">${t('m.dock', { n, d: `${next <= now ? '−' : '+'}${fmt(Math.abs(now - next))}` })}</span><button class="btn" data-m-carttoggle aria-expanded="${M.cartOpen}">${esc(t(M.cartOpen ? 'm.dock.close' : 'm.dock.open'))}</button><button class="btn primary" data-m-preview>${esc(t('m.dlg.apply'))}</button>`
+    : `<span class="sum" style="color:var(--muted)">${esc(t('m.dock.empty'))}</span>${last ? `<button class="btn" data-m-undo>${esc(t('m.undo'))}</button>` : ''}`;
+}
+
+// ----- preview, apply, undo -----
+const changesPayload = () => [...M.staged.values()].map(({ agent, id, scope, kind, value }) => ({ agent, id, scope, kind, value }));
+function setApplyBtn(state, disabled) {
+  const b = $('m-dlg-apply');
+  b.disabled = disabled;
+  b.innerHTML = state === 'busy' ? `<span class="spin"></span>${esc(t('m.dlg.applying'))}` : esc(t(state === 'retry' ? 'm.dlg.retry' : 'm.dlg.apply'));
+}
+function errBox(e) {
+  if (e.status === 403) return `<div class="err" role="alert"><span>${t('m.err.token')}</span></div>`;
+  if (e.rejected) return `<div class="err" role="alert"><b>${esc(t('m.err.generic'))}</b><span>${esc(t('m.err.rejected', { n: e.rejected.length }))}</span></div>`;
+  const locked = ['EBUSY', 'EPERM', 'EACCES'].includes(e.code);
+  const why = e.code === 'changed' ? t('m.err.changed') : locked ? t('m.err.locked') : T[`m.err.${e.code}`] ? t(`m.err.${e.code}`) : e.message;
+  const wrote = e.status && !['comments', 'parse', 'inline-toml'].includes(e.code);
+  return `<div class="err" role="alert"><b>${esc(e.file ? t('m.err.title', { f: tilde(e.file) }) : t('m.err.generic'))}</b><span>${esc(why)}${wrote ? ` ${esc(t('m.err.rolledBack'))}` : ''}</span></div>`;
+}
+async function openPreview() {
+  if (!M.staged.size) return;
+  closeXpop(false);
+  $('m-dlg-sub').textContent = '';
+  $('m-dlg-hint').textContent = t('m.dlg.hint', { dir: '~/.claude/skill-policy/backups' });
+  $('m-dlg-body').innerHTML = `<p class="empty">${esc(t('m.dlg.loading'))}</p>`;
+  setApplyBtn('idle', true);
+  if (!$('m-dlg').open) $('m-dlg').showModal();
+  try {
+    const r = await mApi('/api/modes/preview', { changes: changesPayload() });
+    $('m-dlg-sub').textContent = t('m.dlg.sub', { n: M.staged.size, f: r.files.length });
+    $('m-dlg-body').innerHTML = r.errors.map(errBox).join('') + (r.files.length ? r.files.map((f) => `<section class="ffile">
+      <h3><span class="role ${esc(f.role)}">${esc(t(`m.role.${f.role}`))}</span><code>${esc(tilde(f.file))}</code>${f.created ? `<span class="pill">${esc(t('m.dlg.new'))}</span>` : ''}<span class="pill">${esc(t('m.dlg.lines', { n: f.lines.length }))}</span></h3>
+      <ul>${f.lines.map((l) => `<li><span>${esc(tildeIn(l.field))}</span><span class="from">${esc(l.from ?? t('m.dlg.none'))}</span>→<span class="to">${esc(l.to ?? t('m.dlg.none'))}</span></li>`).join('')}</ul></section>`).join('')
+      : `<p class="empty">${esc(t('m.dlg.nothing'))}</p>`);
+    setApplyBtn('idle', r.errors.length > 0);
+    if (!r.errors.length) $('m-dlg-apply').focus();
+  } catch (e) {
+    $('m-dlg-body').innerHTML = errBox(e);
+    setApplyBtn('idle', true);
+  }
+}
+async function applyStaged() {
+  if ($('m-dlg-apply').disabled) return;
+  setApplyBtn('busy', true);
+  $('m-dlg-body').querySelector('.err')?.remove();
+  const n = M.staged.size;
+  try {
+    const r = await mApi('/api/modes/apply', { changes: changesPayload() });
+    const team = r.files.filter((f) => f.role === 'team').length;
+    M.staged.clear();
+    M.selected.clear();
+    M.cartOpen = false;
+    M.data = r.modes;
+    boardStale = true;
+    $('m-dlg').close();
+    renderModes();
+    toast(t('m.t.applied', { n }) + (team ? t('m.t.team', { n: team }) : ''), true);
+  } catch (e) {
+    $('m-dlg-body').insertAdjacentHTML('afterbegin', errBox(e));
+    setApplyBtn('retry', false);
+    $('m-dlg-apply').focus();
+  }
+}
+async function undoApply() {
+  try {
+    const r = await mApi('/api/modes/undo', {});
+    M.data = r.modes;
+    boardStale = true;
+    renderModes();
+    toast(t('m.t.undone'));
+  } catch (e) {
+    toast(e.code === 'conflict' ? t('m.err.conflict', { f: (e.files ?? []).map(tilde).join(', ') }) : e.message);
+  }
+}
+let toastTimer;
+function toast(msg, undo = false) {
+  const el = $('toast');
+  el.innerHTML = `<span>${esc(msg)}</span>${undo ? `<button data-m-undo>${esc(t('m.undo'))}</button>` : ''}`;
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, undo ? 9000 : 5000);
+}
+
+// ----- the exception menu (project + layer + value) and the cross-agent cell menu -----
+const xpop = $('xpop');
+let xAnchor = null;
+// Below the anchor, else above it; always inside the window, scrolling inside when taller than it.
+function placeX(anchor) {
+  xpop.hidden = false;
+  xpop.style.maxHeight = `${window.innerHeight - 16}px`;
+  const r = anchor.getBoundingClientRect(), b = xpop.getBoundingClientRect();
+  let top = r.bottom + 6;
+  if (top + b.height > window.innerHeight - 8) top = r.top - b.height - 6;
+  top = Math.min(Math.max(8, top), window.innerHeight - b.height - 8);
+  xpop.style.top = `${top}px`;
+  xpop.style.left = `${Math.min(Math.max(8, r.left), window.innerWidth - b.width - 8)}px`;
+}
+function closeXpop(refocus = true) {
+  if (xpop.hidden) return;
+  xpop.hidden = true;
+  const a = xAnchor;
+  xAnchor = null;
+  if (refocus && a?.isConnected) a.focus();
+}
+const focusFirstOpt = () => (xpop.querySelector('.opt[aria-checked="true"]:not(:disabled)') ?? xpop.querySelector('.opt:not(:disabled)') ?? xpop.querySelector('select, button'))?.focus();
+function openExc(anchor, id, scope) {
+  const a = mA();
+  const s = skillIn(a, id);
+  if (!s) return;
+  xAnchor = anchor;
+  const projects = M.data.projects.map((pr) => pr.dir).filter((p) => applies(s, p));
+  if (!projects.length) {
+    xpop.innerHTML = `<h4><span class="mono">${esc(s.name)}</span> ${esc(t('m.x.title'))}</h4><p class="note" style="border:0;padding:0">${t('m.x.noProjects')}</p><div class="foot"><button class="link" data-x-close>${esc(t('m.x.close'))}</button></div>`;
+    placeX(anchor);
+    return xpop.querySelector('button').focus();
+  }
+  const taken = new Set(exceptions(a, s).map((e) => e.p));
+  const pre = scope ? parseScope(scope) : { p: projects.find((p) => !taken.has(p)) ?? projects[0], layer: a.layers[0] };
+  drawExc(a, s, projects, pre.p, pre.layer);
+  placeX(anchor);
+  focusFirstOpt();
+}
+function drawExc(a, s, projects, p, layer) {
+  const sc = `${p}|${layer}`;
+  const val = cur(a, s, sc);
+  const mineVal = layer === 'team' && a.layers.includes('mine') ? cur(a, s, `${p}|mine`) : undefined;
+  Object.assign(xpop.dataset, { kind: 'exc', skill: s.id, scope: sc });
+  const where = a.layers.length > 1
+    ? `<div class="field"><span>${esc(t('m.x.where'))}</span><div class="layers" role="radiogroup" aria-label="${esc(t('m.x.where'))}">${['mine', 'team'].map((l) => `<label><input type="radio" name="x-layer" value="${l}"${layer === l ? ' checked' : ''}>${esc(t(`m.x.${l}`))}<small>${esc(t(`m.x.${l}.sub`))}</small></label>`).join('')}</div></div>`
+    : `<div class="field"><span>${esc(t('m.x.file'))}</span><span class="file">${esc(t('m.x.file.sub', { f: a.files.team }))}</span></div>`;
+  xpop.innerHTML = `<h4><span class="mono">${esc(s.name)}</span> ${esc(t('m.x.title'))}</h4>
+    <label class="field"><span>${esc(t('m.x.project'))}</span><select id="x-proj">${projects.map((x) => `<option value="${esc(x)}"${x === p ? ' selected' : ''}>${esc(projName(x))}</option>`).join('')}</select></label>
+    ${where}
+    <div class="opts" role="radiogroup" aria-label="${esc(t('m.x.values'))}">${['inherit', ...M_VALUES].map((o) => {
+      const why = whyNot(a, s, sc, o);
+      const text = o === 'inherit' ? `${esc(MV('inherit'))} <span class="hint">(${esc(MV(inherited(a, s, sc)))})</span>` : esc(MVL(o));
+      return `<button class="opt" role="radio" aria-checked="${(val ?? 'inherit') === o}" data-x-v="${o}"${why ? ' disabled' : ''}>${o === 'inherit' ? '<span></span>' : mdot(o)}<span>${text}</span>${why ? `<span class="why">${esc(why)}</span>` : ''}</button>`;
+    }).join('')}</div>
+    ${mineVal !== undefined ? `<p class="note">${esc(t('m.x.mineWins', { v: MV(mineVal) }))}</p>` : ''}
+    ${layer === 'team' ? `<p class="note">${esc(t('m.x.teamNote'))}${a.id === 'qwen' ? ` ${esc(t('m.x.qwenTrust'))}` : ''}</p>` : ''}
+    <div class="foot"><button class="link" data-x-close>${esc(t('m.x.close'))}</button>${val !== undefined ? `<button class="link" data-x-v="inherit" style="color:var(--warn)">${esc(t('m.x.clear'))}</button>` : ''}</div>`;
+  $('x-proj').addEventListener('change', (e) => {
+    drawExc(a, s, projects, e.target.value, layer);
+    placeX(xAnchor);
+    $('x-proj').focus();
+  });
+  for (const r of xpop.querySelectorAll('input[name="x-layer"]')) {
+    r.addEventListener('change', (e) => {
+      drawExc(a, s, projects, p, e.target.value);
+      placeX(xAnchor);
+      xpop.querySelector(`input[value="${e.target.value}"]`)?.focus();
+    });
+  }
+}
+function openCross(anchor, agentId, name) {
+  const a = mAgentBy(agentId);
+  const copies = a.skills.filter((s) => s.name === name);
+  const s = copies[0];
+  xAnchor = anchor;
+  Object.assign(xpop.dataset, { kind: 'cross', agent: agentId, name });
+  const val = effective(a, s, null);
+  xpop.innerHTML = `<h4>${agentTag(a.id, a.label)} <span class="mono">${esc(name)}</span></h4>
+    ${copies.length > 1 ? `<p class="note" style="border:0;padding:0">${esc(t('m.xc.copies', { n: copies.length }))}</p>` : ''}
+    <div class="opts" role="radiogroup" aria-label="${esc(t('m.scope.global'))}">${M_VALUES.map((o) => {
+      const why = whyNot(a, s, 'global', o);
+      return `<button class="opt" role="radio" aria-checked="${val === o}" data-x-xv="${o}"${why ? ' disabled' : ''}>${mdot(o)}<span>${esc(MVL(o))}</span>${why ? `<span class="why">${esc(why)}</span>` : ''}</button>`;
+    }).join('')}</div>
+    <div class="foot"><button class="link" data-x-close>${esc(t('m.x.close'))}</button><button class="link" data-x-goto="${esc(a.id)}">${esc(t('m.xc.goto'))}</button></div>`;
+  placeX(anchor);
+  focusFirstOpt();
+}
+
+// ----- actions -----
+function setModeView(v) {
+  M.view = v;
+  saved.set('skill-dash-mview', v);
+  Object.assign(M, { filter: 'all', q: '', lastIdx: null });
+  M.selected.clear();
+  renderModes();
+}
+function setModeAgent(id) {
+  M.agent = id;
+  saved.set('skill-dash-magent', id);
+  Object.assign(M, { scope: 'global', filter: 'all', lastIdx: null });
+  M.selected.clear();
+  renderModes();
+}
+function driftAction(kind) {
+  if (kind === 'view') {
+    if (M.view !== 'agent') {
+      M.view = 'agent';
+      M.agent = mAgents().find((a) => a.skills.some((s) => isDrift(a, s)))?.id ?? M.agent;
+    }
+    Object.assign(M, { filter: 'drift', scope: 'global', q: '' });
+    return renderModes();
+  }
+  let n = 0;
+  for (const a of M.view === 'agent' ? [mA()] : mAgents()) {
+    for (const s of a.skills) {
+      for (const sc of driftScopes(a, s)) {
+        stage(a, s, sc, { kind });
+        n++;
+      }
+    }
+  }
+  renderModes();
+  toast(t('m.t.staged', { n }));
+}
+function recAction(kind) {
+  const a = mA();
+  const to = a.modes.includes('manual') ? 'manual' : 'off';
+  let n = 0;
+  for (const s of a.skills) {
+    if (kind === 'idle' && mIdle(a, s) && trySet(a, s, 'global', to)) n++;
+    if (kind === 'dup' && s.extra && effective(a, s, null) !== 'off' && trySet(a, s, 'global', 'off')) n++;
+  }
+  Object.assign(M, { filter: 'pending', scope: 'global' });
+  renderModes();
+  toast(t('m.t.staged', { n }));
+}
+function bulkAgent(value) {
+  const a = mA();
+  let n = 0;
+  let skip = 0;
+  for (const id of M.selected) {
+    const s = skillIn(a, id);
+    if (!s) continue;
+    if (trySet(a, s, M.scope, value)) n++;
+    else skip++;
+  }
+  M.selected.clear();
+  renderModes();
+  toast(t('m.t.staged', { n }) + (skip ? t('m.t.skipped', { n: skip }) : ''));
+}
+function bulkCross(value) {
+  let n = 0;
+  let skip = 0;
+  let fell = 0;
+  for (const name of M.selected) {
+    for (const a of mAgents()) {
+      for (const s of a.skills.filter((x) => x.name === name)) {
+        let v = value;
+        // Never put a different value in quietly: the bar asks whether to skip or turn off.
+        if (v === 'manual' && !a.readOnly && !a.modes.includes('manual')) {
+          if (M.fallback !== 'off') {
+            skip++;
+            continue;
+          }
+          v = 'off';
+          fell++;
+        }
+        if (trySet(a, s, 'global', v)) n++;
+        else skip++;
+      }
+    }
+  }
+  M.selected.clear();
+  renderModes();
+  toast(t('m.t.staged', { n }) + (fell ? t('m.t.fell', { n: fell }) : '') + (skip ? t('m.t.skipped', { n: skip }) : ''));
+}
+function copyGit(agentId) {
+  const a = mAgentBy(agentId);
+  const rel = a.files.team;
+  const cmd = teamDirtyFor(a).map((f) => {
+    const p = f.slice(0, f.length - rel.length - 1);
+    return `git -C "${p}" add -- ${rel} && git -C "${p}" commit -m "chore: update skill invocation settings" -- ${rel}`;
+  }).join('\n');
+  navigator.clipboard?.writeText(cmd).then(() => toast(t('m.t.copied')), () => toast(cmd));
+}
+// Re-rendering replaces the panel; put focus back on the control the user was on.
+const refocus = (sel) => document.querySelector(sel)?.focus();
+
+// ----- events -----
+$('m-views').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (b && b.dataset.v !== M.view) setModeView(b.dataset.v);
+});
+document.addEventListener('click', (e) => {
+  const el = e.target;
+  if (el.closest('#xpop')) {
+    if (el.closest('[data-x-close]')) return closeXpop();
+    const goto = el.closest('[data-x-goto]');
+    if (goto) {
+      const name = xpop.dataset.name;
+      closeXpop(false);
+      Object.assign(M, { view: 'agent', agent: goto.dataset.xGoto, filter: 'all', scope: 'global', q: name, focus: { agent: goto.dataset.xGoto, name } });
+      M.selected.clear();
+      return renderModes();
+    }
+    const xv = el.closest('[data-x-xv]');
+    if (xv && !xv.disabled) {
+      const a = mAgentBy(xpop.dataset.agent);
+      const name = xpop.dataset.name;
+      for (const s of a.skills.filter((x) => x.name === name)) trySet(a, s, 'global', xv.dataset.xXv);
+      closeXpop(false);
+      renderModes();
+      return refocus(`[data-m-xagent="${CSS.escape(a.id)}"][data-m-xname="${CSS.escape(name)}"]`);
+    }
+    const v = el.closest('[data-x-v]');
+    if (v && !v.disabled) {
+      const a = mA();
+      const s = skillIn(a, xpop.dataset.skill);
+      trySet(a, s, xpop.dataset.scope, v.dataset.xV);
+      closeXpop(false);
+      renderModes();
+      return refocus(`[data-m-row="${CSS.escape(s.id)}"] .xchip, [data-m-row="${CSS.escape(s.id)}"] .xadd`);
+    }
+    return;
+  }
+  if (!xpop.hidden && !el.closest('[data-m-exc], [data-m-xagent]')) closeXpop(false);
+  if (el.closest('#m-dlg')) {
+    if (el.closest('#m-dlg-cancel')) return $('m-dlg').close();
+    if (el.closest('#m-dlg-apply')) return applyStaged();
+    return;
+  }
+  const hit = (sel) => el.closest(sel);
+  let b;
+  if ((b = hit('[data-m-agent]'))) return setModeAgent(b.dataset.mAgent);
+  if ((b = hit('[data-m-filter]'))) {
+    M.filter = b.dataset.mFilter;
+    renderModes();
+    return refocus(`[data-m-filter="${M.filter}"]`);
+  }
+  if (hit('[data-m-reset]')) {
+    Object.assign(M, { filter: 'all', q: '' });
+    return renderModes();
+  }
+  if (hit('[data-m-reload]')) return loadModes(true);
+  if ((b = hit('.modeseg [data-m-set]'))) {
+    if (b.getAttribute('aria-disabled') === 'true') return toast(b.dataset.tip || '');
+    const a = mA();
+    const s = skillIn(a, b.closest('.modeseg').dataset.mSeg);
+    trySet(a, s, M.scope, b.dataset.mSet);
+    renderModes();
+    return refocus(`[data-m-row="${CSS.escape(s.id)}"] .modeseg [tabindex="0"]`);
+  }
+  if ((b = hit('[data-m-exc]'))) return openExc(b, b.dataset.mExc, b.dataset.scope);
+  if ((b = hit('[data-m-xagent]'))) return openCross(b, b.dataset.mXagent, b.dataset.mXname);
+  if ((b = hit('[data-m-rec]'))) return recAction(b.dataset.mRec);
+  if ((b = hit('[data-m-drift]'))) return driftAction(b.dataset.mDrift);
+  if ((b = hit('[data-m-bulk]'))) {
+    if (b.getAttribute('aria-disabled') === 'true') return toast(b.dataset.tip || '');
+    return bulkAgent(b.dataset.mBulk);
+  }
+  if ((b = hit('[data-m-xbulk]'))) return bulkCross(b.dataset.mXbulk);
+  if (hit('[data-m-clear]')) {
+    M.selected.clear();
+    return renderModes();
+  }
+  if ((b = hit('[data-m-unstage]'))) {
+    M.staged.delete(b.dataset.mUnstage);
+    renderModes();
+    return refocus('#m-cart .x, #m-cart [data-m-undo], #m-cart h2');
+  }
+  if (hit('[data-m-discard]')) {
+    M.staged.clear();
+    M.cartOpen = false;
+    return renderModes();
+  }
+  if (hit('[data-m-preview]')) return openPreview();
+  if (hit('[data-m-carttoggle]')) {
+    M.cartOpen = !M.cartOpen;
+    return renderCart();
+  }
+  if (hit('[data-m-undo]')) {
+    $('toast').hidden = true;
+    return undoApply();
+  }
+  if ((b = hit('[data-m-copygit]'))) return copyGit(b.dataset.mCopygit);
+});
+// Shift+click on a row checkbox selects the range since the last one.
+let shiftHeld = false;
+document.addEventListener('pointerdown', (e) => { shiftHeld = e.shiftKey; }, true);
+document.addEventListener('keydown', (e) => { if (e.key === ' ') shiftHeld = e.shiftKey; }, true);
+document.addEventListener('change', (e) => {
+  const el = e.target;
+  if (el.id === 'm-scope') {
+    M.scope = el.value;
+    renderModes();
+    return refocus('#m-scope');
+  }
+  if (el.name === 'm-fb') {
+    M.fallback = el.value;
+    return;
+  }
+  if (el.dataset.mSel) {
+    const i = Number(el.dataset.i);
+    const ids = shiftHeld && M.lastIdx !== null ? M.rowOrder.slice(Math.min(i, M.lastIdx), Math.max(i, M.lastIdx) + 1) : [el.dataset.mSel];
+    for (const id of ids) el.checked ? M.selected.add(id) : M.selected.delete(id);
+    M.lastIdx = i;
+    renderModes();
+    return refocus(`[data-m-sel="${CSS.escape(el.dataset.mSel)}"]`);
+  }
+  if (el.dataset.mGsel) {
+    const a = mA();
+    for (const s of mVisible(a).filter((x) => x.category === el.dataset.mGsel)) el.checked ? M.selected.add(s.id) : M.selected.delete(s.id);
+    renderModes();
+    return refocus(`[data-m-gsel="${CSS.escape(el.dataset.mGsel)}"]`);
+  }
+  if (el.dataset.mXsel) {
+    el.checked ? M.selected.add(el.dataset.mXsel) : M.selected.delete(el.dataset.mXsel);
+    renderModes();
+    return refocus(`[data-m-xsel="${CSS.escape(el.dataset.mXsel)}"]`);
+  }
+  if (el.id === 'm-xsel-all') {
+    for (const r of crossRows()) el.checked ? M.selected.add(r.name) : M.selected.delete(r.name);
+    renderModes();
+    return refocus('#m-xsel-all');
+  }
+});
+// The group checkbox sits inside <summary>; keep a click on it from opening or closing the group.
+document.addEventListener('click', (e) => { if (e.target.matches?.('summary .gsel')) e.stopPropagation(); }, true);
+$('m-main').addEventListener('toggle', (e) => {
+  const key = e.target.dataset?.mkey;
+  if (key) saved.set(`skill-dash-mclosed:${key}`, e.target.open ? '0' : '1');
+}, true);
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'm-q') return;
+  M.q = e.target.value;
+  const pos = e.target.selectionStart;
+  renderModes();
+  const q = $('m-q');
+  if (q) {
+    q.focus();
+    q.setSelectionRange(pos, pos);
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !xpop.hidden) {
+    e.preventDefault();
+    return closeXpop();
+  }
+  const arrows = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+  // Inside a mode control the arrows move and choose, like native radio buttons.
+  const seg = e.target.closest?.('.modeseg');
+  if (seg && arrows.includes(e.key)) {
+    e.preventDefault();
+    const btns = [...seg.querySelectorAll('[data-m-set]:not([aria-disabled="true"])')];
+    if (!btns.length) return;
+    const i = btns.indexOf(document.activeElement);
+    btns[(i + (e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1) + btns.length) % btns.length].click();
+    return;
+  }
+  if (!xpop.hidden && xpop.contains(e.target) && ['ArrowDown', 'ArrowUp'].includes(e.key) && e.target.closest('.opts')) {
+    e.preventDefault();
+    const opts = [...xpop.querySelectorAll('.opt:not(:disabled)')];
+    opts[(opts.indexOf(document.activeElement) + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length]?.focus();
+  }
+});
+window.addEventListener('scroll', () => { if (xAnchor?.isConnected && !xpop.hidden) placeX(xAnchor); }, true);
+$('m-dlg').addEventListener('close', () => refocus('[data-m-preview]'));
+// Staged changes live only in this page: ask before leaving with some.
+window.addEventListener('beforeunload', (e) => {
+  if (!M.staged.size) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+
 // Missing translations show up as raw keys; list them once for whoever edits the strings.
-const missing = [...document.querySelectorAll('[data-i18n],[data-i18n-html]')].map((el) => el.dataset.i18n ?? el.dataset.i18nHtml).filter((k) => !T[k]);
+const missing =[...document.querySelectorAll('[data-i18n],[data-i18n-html]')].map((el) => el.dataset.i18n ?? el.dataset.i18nHtml).filter((k) => !T[k]);
 if (missing.length) console.warn('skill dashboard: missing strings', [...new Set(missing)]);
 
 setView(view);

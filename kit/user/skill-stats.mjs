@@ -1,18 +1,20 @@
-// 스킬 사용 통계와 대시보드: 코딩 에이전트(Claude Code, Codex, Gemini CLI, Copilot CLI)의 대화 기록에서
+// 스킬 사용 통계와 대시보드: 코딩 에이전트(Claude Code, Codex, CodeBuddy Code, Gemini CLI, Copilot CLI 등)의 대화 기록에서
 // 스킬 호출과 토큰 사용량을 모아 ~/.claude/skill-policy/stats.json에 쌓고, 에이전트별 스킬 상태·토큰과 함께
-// localhost 대시보드로 보여 준다. 기록 형식별 읽기는 skill-agents.mjs에 있다.
+// localhost 대시보드로 보여 준다. 기록 형식별 읽기는 skill-agents.mjs, 호출 방식 읽기·쓰기는 skill-modes.mjs에 있다.
 // node skill-stats.mjs collect [--project <dir>] [--exact]
 // node skill-stats.mjs serve [--port 4178] [--project <dir>]
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
-  HOME, USER_SKILLS, USER_SETTINGS, POLICY_DIR, POLICY_FILE, STATE_FILE, PLUGINS_FILE, CLAUDE, DESC_CAP,
+  HOME, USER_SKILLS, USER_SETTINGS, POLICY_DIR, STATE_FILE, PLUGINS_FILE, CLAUDE, DESC_CAP,
   exists, readJson, writeJson, fwd, samePath, estimateTokens, skillsIn, parseSkillMd, listingText, effectiveMode,
 } from './skill-inventory.mjs';
-import { AGENTS, CODEX_HOME, GEMINI_HOME, AGENTS_SKILLS, SCAN_VERSION, dayKey, parseCodexListing } from './skill-agents.mjs';
+import { AGENTS, CODEX_HOME, GEMINI_HOME, CODEBUDDY_HOME, AGENTS_SKILLS, SCAN_VERSION, dayKey, parseCodexListing } from './skill-agents.mjs';
+import { loadPolicy, policyValue, modeReader, buildModes, resolveChange, planChanges, writePlan, undoLast } from './skill-modes.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const STORE = path.join(POLICY_DIR, 'stats.json');
@@ -144,8 +146,8 @@ const summarize = (desc) => {
 
 function inventoryContext() {
   return {
-    state: { installed: [], disabled: [], ...readJson(STATE_FILE) },
-    policy: readJson(POLICY_FILE),
+    state: { installed: [], ...readJson(STATE_FILE) },
+    policy: loadPolicy(),
     meta: loadMeta(),
     lock: readJson(SKILL_LOCK, { skills: {} }).skills ?? {},
     marketplaces: readJson(MARKETPLACES),
@@ -157,9 +159,11 @@ function inventoryContext() {
 function makeRow(ctx, s, { agent, name, mode, scope, project = '', listing, ...extra }) {
   const description = (`${s.fm.description ?? ''} ${s.fm.when_to_use ?? ''}`.trim() || extra.fallbackDescription) ?? '';
   const set = agent === 'claude' ? ctx.state.installed.find((i) => i.name === name)?.set ?? '' : '';
-  const policy = agent !== 'claude' ? ''
-    : ctx.policy.offSkills?.includes(name) ? 'off' : ctx.policy.manualSkills?.includes(name) ? 'manual' : ctx.policy.localOnlySkills?.includes(name) ? 'local-only' : '';
-  const { fallbackDescription, pluginSource, marketplace, plugin, packRoot, ...rest } = extra;
+  // The baseline value from policy.json, shown in the row details.
+  const key = extra.pathKey ? `path:${fwd(s.path)}` : name;
+  const policy = policyValue(ctx.policy, agent, key) ?? (agent === 'claude' && ctx.policy.localOnlySkills?.includes(name) ? 'local-only' : '');
+  const fm = s.fm['disable-model-invocation'] === 'true';
+  const { fallbackDescription, pluginSource, marketplace, plugin, packRoot, pathKey, ...rest } = extra;
   return {
     agent,
     name,
@@ -171,22 +175,28 @@ function makeRow(ctx, s, { agent, name, mode, scope, project = '', listing, ...e
     path: s.path,
     listingText: listing,
     listingTokens: listing ? estimateTokens(listing) : 0,
+    // What the listing would cost if the skill were auto; the Invocation page shows the effect of a change with it.
+    autoTokens: estimateTokens(listing || listingText(name, s.fm, 'on')),
     bodyTokens: estimateTokens(s.body ?? ''),
     set,
     policy,
+    fm,
     scope,
     project,
     ...rest,
   };
 }
 
-function inventoryClaude(projectDirs, ctx) {
-  const userSettings = readJson(USER_SETTINGS);
+// Claude Code, and CodeBuddy Code (a fork with the same settings under .codebuddy): skillOverrides merge
+// user < project settings.json < project settings.local.json, name by name.
+function inventorySettings(agent, projectDirs, ctx) {
+  const { home, dir } = agent === 'claude' ? { home: CLAUDE, dir: '.claude' } : { home: CODEBUDDY_HOME, dir: '.codebuddy' };
+  const userSettings = readJson(agent === 'claude' ? USER_SETTINGS : path.join(home, 'settings.json'));
   const rows = [];
-  const push = (s, name, mode, extra) => rows.push(makeRow(ctx, s, { agent: 'claude', name, mode, listing: listingText(name, s.fm, mode), ...extra }));
+  const push = (s, name, mode, extra) => rows.push(makeRow(ctx, s, { agent, name, mode, listing: listingText(name, s.fm, mode), ...extra }));
 
   const userOverrides = userSettings.skillOverrides ?? {};
-  const userSkills = skillsIn(USER_SKILLS, 'user');
+  const userSkills = skillsIn(agent === 'claude' ? USER_SKILLS : path.join(home, 'skills'), 'user');
   for (const s of userSkills) {
     const name = s.fm.name || s.dir;
     push(s, name, effectiveMode(s.fm, userOverrides[name]), { scope: 'user' });
@@ -195,16 +205,17 @@ function inventoryClaude(projectDirs, ctx) {
   for (const proj of projectDirs) {
     const overrides = {
       ...userOverrides,
-      ...readJson(path.join(proj, '.claude', 'settings.json')).skillOverrides,
-      ...readJson(path.join(proj, '.claude', 'settings.local.json')).skillOverrides,
+      ...readJson(path.join(proj, dir, 'settings.json')).skillOverrides,
+      ...readJson(path.join(proj, dir, 'settings.local.json')).skillOverrides,
     };
-    for (const s of skillsIn(path.join(proj, '.claude', 'skills'), 'project')) {
+    for (const s of skillsIn(path.join(proj, dir, 'skills'), 'project')) {
       const name = s.fm.name || s.dir;
       // Personal skills win over project skills of the same name.
       const shadowed = userSkills.some((u) => (u.fm.name || u.dir) === name);
       push(s, name, shadowed ? 'shadowed' : effectiveMode(s.fm, overrides[name]), { scope: 'project', project: fwd(proj) });
     }
   }
+  if (agent !== 'claude') return rows;
 
   // Plugin skills ignore skillOverrides; they follow the plugin's enabledPlugins switch.
   for (const [id, installs] of Object.entries(readJson(PLUGINS_FILE, { plugins: {} }).plugins)) {
@@ -261,7 +272,7 @@ function inventoryCodex(listings, ctx) {
     const plugin = fwd(x.file).match(/\/plugins\/cache\/([^/]+)\/([^/]+)\//i);
     const scope = project ? 'project' : scopeOf(x.root);
     rows.push(makeRow(ctx, { dir: path.basename(dirPath), path: dirPath, ...file }, {
-      agent: 'codex', name: x.name, mode: 'on', scope, project, listing: x.line, dup,
+      agent: 'codex', name: x.name, mode: 'on', scope, project, listing: x.line, dup, pathKey: true,
       fallbackDescription: x.line.replace(/^- \S+?:\s?/, '').replace(/\s*\(file: .*\)$/, ''),
       plugin: plugin?.[2], marketplace: plugin?.[1], pluginSource: plugin && marketplaces[plugin[1]], packRoot: x.root,
     }));
@@ -295,7 +306,8 @@ function inventoryCodex(listings, ctx) {
   return { rows, listingSource: 'estimate', listedAt: null };
 }
 
-// Gemini CLI and Copilot CLI: their own skill folders, listed as "name: description" (an estimate).
+// Agents that load skill folders on their own (Gemini CLI, Copilot CLI, Qwen Code, ZCode, Kimi Code), listed as
+// "name: description" (an estimate). Qwen Code and ZCode settings come from skill-modes.mjs.
 function inventoryFolders(agent, projectDirs, ctx) {
   let disabled = [];
   if (agent.id === 'gemini') {
@@ -305,11 +317,13 @@ function inventoryFolders(agent, projectDirs, ctx) {
       /* settings with comments: treat as nothing disabled */
     }
   }
+  const settingsMode = modeReader(agent.id);
+  const pathKey = ['zcode', 'kimi'].includes(agent.id);
   const rows = [];
   const push = (s, scope, project) => {
     const name = s.fm.name || s.dir;
-    const mode = disabled.includes(name) ? 'off' : effectiveMode(s.fm);
-    rows.push(makeRow(ctx, s, { agent: agent.id, name, mode, scope, project, listing: listingText(name, s.fm, mode), packRoot: path.dirname(s.path) }));
+    const mode = disabled.includes(name) ? 'off' : settingsMode({ name, path: s.path, fm: s.fm, project });
+    rows.push(makeRow(ctx, s, { agent: agent.id, name, mode, scope, project, listing: listingText(name, s.fm, mode), packRoot: path.dirname(s.path), pathKey }));
   };
   for (const dir of agent.skillDirs ?? []) for (const s of skillsIn(dir, 'user')) push(s, 'user', '');
   for (const proj of projectDirs) {
@@ -395,12 +409,21 @@ async function collect({ project, exact }) {
   const here = project ?? process.cwd();
   const cwdsOf = (id) => [here, ...files.filter((f) => f.agent === id).flatMap((f) => [f.cwd, ...(f.events ?? []).map((e) => e.project)]).filter(Boolean)];
   const ctx = inventoryContext();
-  const claudeProjects = projectsWith(cwdsOf('claude'), ['.claude']);
-  const inventories = {
-    claude: { rows: inventoryClaude(claudeProjects, ctx), listingSource: 'settings', listedAt: null },
-    codex: inventoryCodex(store.listings.codex, ctx),
-  };
-  for (const agent of AGENTS.filter((a) => !inventories[a.id])) inventories[agent.id] = inventoryFolders(agent, projectsWith(cwdsOf(agent.id), agent.projectSkills ?? []), ctx);
+  // Agents neither installed nor with collected history are left out (ZCode and Kimi Code would otherwise
+  // list the shared ~/.agents/skills folder on PCs that never ran them).
+  const present = (a) => exists(a.home) || files.some((f) => f.agent === a.id);
+  // An agent without history yet: look for its project folders wherever any agent worked.
+  const allCwds = [here, ...files.flatMap((f) => [f.cwd, ...(f.events ?? []).map((e) => e.project)]).filter(Boolean)];
+  const cwdsFor = (a) => (files.some((f) => f.agent === a.id) ? cwdsOf(a.id) : allCwds);
+  const inventories = {};
+  for (const agent of AGENTS) {
+    if (!present(agent)) inventories[agent.id] = { rows: [], listingSource: 'estimate', listedAt: null };
+    else if (agent.id === 'claude' || agent.id === 'codebuddy') {
+      const dir = agent.id === 'claude' ? '.claude' : '.codebuddy';
+      inventories[agent.id] = { rows: inventorySettings(agent.id, projectsWith(cwdsFor(agent), [dir]), ctx), listingSource: 'settings', listedAt: null };
+    } else if (agent.id === 'codex') inventories.codex = inventoryCodex(store.listings.codex, ctx);
+    else inventories[agent.id] = inventoryFolders(agent, projectsWith(cwdsFor(agent), agent.projectSkills ?? []), ctx);
+  }
   const skills = AGENTS.flatMap((a) => inventories[a.id].rows);
 
   const [keyVar, key] = apiKey();
@@ -496,6 +519,7 @@ async function collect({ project, exact }) {
       id: agent.id,
       label: agent.label,
       experimental: !!agent.experimental,
+      noLogs: !!agent.noLogs,
       found: exists(agent.home),
       home: fwd(agent.home),
       logs: agent.logs.map(fwd),
@@ -537,6 +561,28 @@ async function collect({ project, exact }) {
   }].slice(-365);
   writeJson(STORE, store);
 
+  // Folders any agent worked in, newest first: where the Invocation page offers project exceptions.
+  const dirs = new Map();
+  const seen = (p, last) => {
+    const dir = fwd(p).replace(/\/$/, '');
+    if ((dirs.get(dir.toLowerCase())?.last ?? -1) < last) dirs.set(dir.toLowerCase(), { dir, last });
+  };
+  for (const f of files) for (const p of [f.cwd, ...(f.events ?? []).map((e) => e.project)]) if (p) seen(p, f.mtime ?? 0);
+  if (!dirs.has(fwd(here).toLowerCase())) seen(here, now);
+  const isDir = (p) => {
+    try {
+      return fs.statSync(p).isDirectory();
+    } catch {
+      return false;
+    }
+  };
+  // Scratch folders under the temp dir and ~/.claude come from tools, not projects; the folder this runs for stays.
+  const projects = [...dirs.values()]
+    .filter((p) => samePath(p.dir, here) || (!samePath(p.dir, HOME) && !under(p.dir, os.tmpdir()) && !under(p.dir, CLAUDE)))
+    .filter((p) => isDir(p.dir))
+    .sort((a, b) => b.last - a.last)
+    .map((p) => ({ dir: p.dir, last: new Date(p.last).toISOString() }));
+
   const allVisible = skills.filter((s) => s.listingTokens > 0);
   const allIdle = allVisible.filter((s) => s.idle);
   return {
@@ -572,6 +618,7 @@ async function collect({ project, exact }) {
       };
     }),
     snapshots: store.snapshots,
+    projects,
     skills,
   };
 }
@@ -599,26 +646,109 @@ async function printSummary(opts) {
   log(`saved to ${r.store}`);
 }
 
+const readBody = (req) => new Promise((resolve, reject) => {
+  const chunks = [];
+  let size = 0;
+  req.on('data', (c) => {
+    size += c.length;
+    if (size > 1e6) reject(Object.assign(new Error('request too large'), { status: 413 }));
+    else chunks.push(c);
+  });
+  req.on('end', () => {
+    try {
+      resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'));
+    } catch {
+      reject(Object.assign(new Error('invalid JSON'), { status: 400 }));
+    }
+  });
+  req.on('error', reject);
+});
+
+// The Invocation page writes settings files, so its requests must come from this page only:
+//   - Host must be localhost or 127.0.0.1 (a DNS-rebound site sends its own host name),
+//   - a random token made at start-up is put in the page and required in the X-Skill-Dash-Token header,
+//   - writes take JSON only, and the page may not be framed by another site.
 function serve({ port, project }) {
+  const token = crypto.randomBytes(24).toString('hex');
+  const origins = new Set([`http://localhost:${port}`, `http://127.0.0.1:${port}`]);
   let running = null;
+  let stats = null;
+  let modes = null;
+  const collectOnce = async (exact) => {
+    running ??= collect({ project, exact }).finally(() => (running = null));
+    stats = await running;
+    return stats;
+  };
+  const freshModes = async () => {
+    if (!stats) await collectOnce(false);
+    modes = buildModes(stats);
+    return modes;
+  };
+  const send = (res, status, body) => {
+    res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(JSON.stringify(body));
+  };
+  // A request from the page names skills by the ids it was shown; each is checked against the last /api/modes.
+  const resolveAll = (list) => {
+    const changes = [];
+    const rejected = [];
+    for (const r of Array.isArray(list) ? list : []) {
+      const [c, reason] = resolveChange(modes, r);
+      if (c) changes.push(c);
+      else rejected.push({ ...r, reason });
+    }
+    return { changes, rejected };
+  };
+  const fileView = (f) => ({ file: fwd(f.file), role: f.role, created: f.created, lines: f.lines, project: f.project, layer: f.layer });
+
   const server = http.createServer(async (req, res) => {
+    if (!/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(req.headers.host ?? '')) return res.writeHead(403).end();
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/') {
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      return res.end(fs.readFileSync(DASHBOARD_HTML));
+      res.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store',
+        'x-frame-options': 'DENY', 'content-security-policy': "frame-ancestors 'none'", 'referrer-policy': 'no-referrer',
+      });
+      return res.end(fs.readFileSync(DASHBOARD_HTML, 'utf8').replace('__SKILL_DASH_TOKEN__', token));
     }
     if (url.pathname === '/api/stats') {
       try {
-        running ??= collect({ project, exact: url.searchParams.has('exact') }).finally(() => (running = null));
-        const data = await running;
-        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-        return res.end(JSON.stringify(data));
+        const data = await collectOnce(url.searchParams.has('exact'));
+        if (modes) modes = buildModes(data);
+        return send(res, 200, data);
       } catch (e) {
-        res.writeHead(500, { 'content-type': 'application/json' });
-        return res.end(JSON.stringify({ error: e.message }));
+        return send(res, 500, { error: e.message });
       }
     }
-    res.writeHead(404).end();
+    if (!url.pathname.startsWith('/api/modes')) return res.writeHead(404).end();
+    if (req.headers['x-skill-dash-token'] !== token || (req.headers.origin && !origins.has(req.headers.origin))) return send(res, 403, { error: 'forbidden' });
+    try {
+      if (url.pathname === '/api/modes' && req.method === 'GET') {
+        if (url.searchParams.has('refresh')) await collectOnce(false);
+        return send(res, 200, await freshModes());
+      }
+      if (req.method !== 'POST') return send(res, 405, { error: 'method not allowed' });
+      if (!/^application\/json\b/i.test(req.headers['content-type'] ?? '')) return send(res, 415, { error: 'JSON only' });
+      const body = await readBody(req);
+      if (!modes) await freshModes();
+      if (url.pathname === '/api/modes/undo') {
+        const r = undoLast();
+        return send(res, 200, { ok: true, files: r.files, modes: await freshModes() });
+      }
+      const { changes, rejected } = resolveAll(body.changes);
+      if (rejected.length) return send(res, 400, { error: 'rejected', rejected });
+      // Planned from the files as they are now; apply plans again, so it writes on top of the latest contents.
+      const plan = planChanges(changes);
+      if (url.pathname === '/api/modes/preview') return send(res, 200, { files: plan.files.map(fileView), errors: plan.errors.map((e) => ({ ...e, file: fwd(e.file) })) });
+      if (url.pathname === '/api/modes/apply') {
+        const r = writePlan(plan);
+        return send(res, 200, { ok: true, files: r.files.map(fileView), backupDir: r.backupDir, modes: await freshModes() });
+      }
+      return send(res, 404, { error: 'not found' });
+    } catch (e) {
+      const status = e.status ?? (['changed', 'conflict', 'comments', 'parse', 'inline-toml', 'no-undo'].includes(e.code) ? 409 : 500);
+      return send(res, status, { error: e.message, code: e.code ?? null, file: e.file ?? null, files: e.files ?? null });
+    }
   });
   server.on('error', (e) => {
     console.error(e.code === 'EADDRINUSE' ? `port ${port} is in use. Try --port <other>` : e.message);

@@ -43,9 +43,9 @@ node setup.mjs skills add documents
 | Superpowers、Codex 插件（用户范围） | `claude plugin install` |
 | 技能策略脚本和策略文件 | `~/.claude/skill-policy/` |
 | 技能集管理器和目录（`skill-sets.mjs`、`skill-sets.json`） | `~/.claude/skill-policy/` |
-| 技能统计与仪表盘（`skill-stats.mjs`、`skill-agents.mjs`、`skill-inventory.mjs`、`skill-dashboard.html`、`skill-meta.json`） | `~/.claude/skill-policy/` |
+| 技能统计与仪表盘（`skill-stats.mjs`、`skill-agents.mjs`、`skill-inventory.mjs`、`skill-modes.mjs`、`skill-dashboard.html`、`skill-meta.json`） | `~/.claude/skill-policy/` |
 | `skill-sets` 技能：可以直接用自然语言让 Claude 安装或开关技能集 | `~/.claude/skills/skill-sets/` |
-| `skillOverrides`（把策略中列出的技能设为仅手动或关闭） | `~/.claude/settings.json` |
+| `skillOverrides`（把基准中列出的技能设为仅手动或关闭） | `~/.claude/settings.json` |
 | 会话开始时的策略检查钩子 | `~/.claude/settings.json` |
 
 会移除 Superpowers 的 `using-superpowers` 引导（每次会话都完整注入）。其余 Superpowers 技能仍会根据描述自动触发。
@@ -69,23 +69,26 @@ node setup.mjs skills add documents
 
 ## 技能策略如何作用于已有技能
 
-一句话：**策略从不安装技能。只有当 `policy.json` 中列出名字的技能存在于这台电脑上时，策略才改变该技能的行为。**
+一句话：**策略从不安装技能。只有当基准（`policy.json`）中列出名字的技能存在于这台电脑上时，策略才改变该技能的行为。**
 未列出的技能不受影响。
 
-策略以 `"技能名": "状态"` 的形式写入 `~/.claude/settings.json` 的 `skillOverrides`。Claude Code 会把它应用到
-**同名的任何技能**，不论其位置（`~/.claude/skills/` 或项目的 `.claude/skills/`）。插件技能
-（如 `superpowers:brainstorming` 这种 `插件:技能` 名称）不受影响。
+基准按智能体写在 `~/.claude/skill-policy/policy.json` 的 `modes` 中，形式为 `"技能名": "值"`。对 Claude Code 来说，
+它会作为 `~/.claude/settings.json` 的 `skillOverrides` 生效（实际值）。Claude Code 会把它应用到**同名的任何技能**，
+不论其位置（`~/.claude/skills/` 或项目的 `.claude/skills/`）。插件技能（如 `superpowers:brainstorming` 这种
+`插件:技能` 名称）不受影响。
 
-| 策略列表 | 设置值 | 效果 |
+| 基准 | 设置值（Claude Code） | 效果 |
 | --- | --- | --- |
-| `manualSkills` | `user-invocable-only` | Claude 不会自行调用，只能通过 `/名称` 运行。其描述也不再进入上下文，节省 token |
-| `offSkills` | `off` | 完全隐藏。若被重新安装到 `~/.claude/skills/`，会删除该文件夹（会话开始时先询问） |
-| `localOnlySkills` | 移动文件夹 + `disable-model-invocation` | 从全局移除，只保留在指定项目中 |
-| （未列出） | 无 | 保持原样，自动调用 |
+| `manual` | `user-invocable-only` | Claude 不会自行调用，只能通过 `/名称` 运行。其描述也不再进入上下文，节省 token |
+| `off` | `off` | 完全隐藏。文件夹保留 |
+| `auto` | 无 | 自动调用。若升级把它关闭，会提示你 |
+| （不在基准中） | 保持原样 | 不受影响（未管理） |
+| `removeIfReinstalled` 列表 | – | 若被重新安装到 `~/.claude/skills/`，会删除该文件夹（会话开始时先询问） |
+| `localOnlySkills` 列表 | 移动文件夹 + `disable-model-invocation` | 从全局移除，只保留在指定项目中 |
 
 ### 示例
 
-默认 `policy.json` 的 `manualSkills` 中列有 gstack 的技能名（`review`、`qa`、`ship` …）。
+默认基准把 gstack 的技能名（`review`、`qa`、`ship` …）设为 `manual`。
 
 1. **没有安装 gstack 的成员。** `settings.json` 里只会多一行 `"review": "user-invocable-only"`。
    因为不存在名为 `review` 的技能，所以什么也不会发生。“不强制安装，存在时才应用策略”就是这个意思。
@@ -93,13 +96,13 @@ node setup.mjs skills add documents
    Claude 也不会自动调用 gstack 的 `review`，必须输入 `/review`。
    如果之后 gstack 升级清除了该设置，下次会话开始时 Claude 会询问“要恢复吗？”。
 3. **自己写的个人技能 `~/.claude/skills/my-notes/`。** 未列出，所以没有变化，仍会自动调用。
-   想改为仅手动，把 `"my-notes"` 加入 `manualSkills` 后执行 `--apply`。
+   想改为仅手动，在仪表盘的调用方式页面中选择，或执行 `node setup.mjs skills manual my-notes`。
 4. **项目技能 `.claude/skills/grill-me/`**（本模板添加）。未列出，所以没有变化。
    它本身的 `SKILL.md` 里就有 `disable-model-invocation: true`，本来就是仅手动。
-5. **名称冲突的项目技能。** 如果团队仓库中有 `.claude/skills/review/`，你电脑上的策略也会作用于它，
-   使它**只对你**变为仅 `/review`。其他成员不受影响。若不希望这样，从 `manualSkills` 中删掉 `review`，
+5. **名称冲突的项目技能。** 如果团队仓库中有 `.claude/skills/review/`，你电脑上的全局基准也会作用于它，
+   使它**只对你**变为仅 `/review`。其他成员不受影响。若不希望这样，在调用方式页面为该项目添加“仅自己”例外，
    或给项目技能改名。（如果 `~/.claude/skills/` 中也有同名技能，个人技能优先，项目技能被遮蔽。）
-6. **`offSkills` 中的 `autoplan`。** 项目中的同名技能只会被隐藏，文件保留。
+6. **`autoplan`**（基准为 `off`，也在 `removeIfReinstalled` 中）。项目中的同名技能只会被隐藏，文件保留。
    `~/.claude/skills/autoplan/` 每次重新出现都会被删除。
 7. **`localOnlySkills` 中的 `browseros-neo`。** 执行 `node setup.mjs user --local-project ../blog` 后，
    会把 `~/.claude/skills/browseros-neo/` 移到 `../blog/.claude/skills/`，设为仅手动，并加入
@@ -109,24 +112,34 @@ node setup.mjs skills add documents
 
 ### 修改策略
 
-编辑 `~/.claude/skill-policy/policy.json` 后：
+最方便的是仪表盘的**调用方式**页面（`node setup.mjs dashboard`，见下文）。为每个智能体选择全局值和项目例外，
+在预览中确认要修改的文件后再应用。它会同时修改基准和各智能体的设置文件，两者不会出现偏差。用命令（Claude Code 全局）：
 
 ```bash
-node ~/.claude/skill-policy/skill-policy.mjs --apply   # 应用
-node setup.mjs check                                   # 只显示不一致的地方
+node setup.mjs skills manual review qa     # 仅手动
+node setup.mjs skills off docx             # 关闭
+node setup.mjs skills on docx              # 自动
+node setup.mjs check                       # 只显示与基准不一致的地方
 ```
+
+手动编辑 `policy.json` 后，用 `node ~/.claude/skill-policy/skill-policy.mjs --apply` 应用。
 
 | 键 | 含义 |
 | --- | --- |
-| `offSkills` | 完全关闭（`skillOverrides: off`，即使重新安装到 `~/.claude/skills` 也会删除） |
-| `manualSkills` | 仅手动（只能通过 `/名称` 调用） |
+| `modes.<智能体>.global` | 全局默认：`{ "技能名": "auto" \| "manual" \| "off" }`。只指定一个副本时用 `"path:<技能文件夹>"` |
+| `modes.<智能体>.projects["<目录>"]` | 项目例外中的“仅自己”（本机）。“团队共享”直接写入仓库的设置文件，不放在这里 |
+| `removeIfReinstalled` | 重新安装到 `~/.claude/skills` 时要再次删除文件夹的技能 |
 | `localOnlySkills`、`localSkillProjects` | 个人技能只放在指定项目中 |
 | `stripSuperpowersBootstrap` | 去掉每次会话注入的 using-superpowers |
 | `userPlugins` | 用户范围内要启用或禁用的插件 |
 | `projectPluginRemovals` | 要从特定项目设置中移除的插件（`{"<settings.json 路径>": ["id"]}`） |
 
-当 gstack 升级、插件更新、`npx skills` 更新或 BrowserOS 还原了设置时，钩子会在下次会话开始时发现，
-Claude 会先询问是否恢复，不会自动修改。
+智能体键为 `claude`、`codebuddy`、`qwen`、`codex`、`zcode`。旧格式（`manualSkills`、`offSkills` 以及
+`state.json` 中的 `disabled`）会在首次读取时自动迁移，原文件保留为 `policy.v1.json`。
+
+当 gstack 升级、插件更新、`npx skills` 更新、BrowserOS 或智能体的 `/skills` 界面修改了设置时，钩子会在下次
+会话开始时发现，Claude 会先询问，不会自动修改。根据回答执行 `--apply`（恢复为基准）或 `--adopt`（把当前值
+采纳为新的基准）。
 
 ## 技能集：按领域选择安装
 
@@ -168,12 +181,13 @@ node setup.mjs skills off documents        # 关闭技能集
 node setup.mjs skills off review qa        # 按名称关闭任意技能（gstack 技能也可以）
 node setup.mjs skills off all              # 关闭所有已安装的技能集
 node setup.mjs skills off plugin:superpowers
-node setup.mjs skills on all               # 重新开启（策略中的 manual/off 保持不变）
+node setup.mjs skills on all               # 重新开启（自动）
+node setup.mjs skills manual review        # 仅手动（/名称）
 node setup.mjs skills status               # 各技能状态与预估 token
 ```
 
-用 `off` 关闭的技能会记录在 `~/.claude/skill-policy/state.json` 中，因此会话开始时的检查不会把它当作
-“与策略不一致”而改回去。`on` 会恢复为策略值（若在 `manualSkills` 中则为仅手动）。
+`on`、`off`、`manual` 会同时修改基准（`policy.json`）和 `settings.json`，因此会话开始时的检查不会把它当作
+“与基准不一致”。原本仅手动的技能执行 `on` 后会变为自动。
 
 ### 比较步骤（例：`documents` 技能集是否值得）
 
@@ -204,12 +218,14 @@ node setup.mjs stats --exact          # 用 count_tokens API 精确计算 Claude
 node ~/.claude/skill-policy/skill-stats.mjs serve   # 不需要本仓库，用已安装的副本
 ```
 
-通过顶部菜单在两个页面间切换，并在右上角选择语言（한국어、English、简体中文）。所选语言和主题会记在浏览器里。
+通过顶部菜单在三个页面间切换，并在右上角选择语言（한국어、English、简体中文）。所选语言和主题会记在浏览器里。
 
-- **概览**：在顶部选择编码智能体（全部、Claude Code、Codex、Gemini CLI、GitHub Copilot CLI）。显示汇总数字、
+- **概览**：在顶部选择编码智能体（全部，以及本机上有的 Claude Code、Codex、CodeBuddy Code、Qwen Code、Gemini CLI、
+  GitHub Copilot CLI）。显示汇总数字、
   按智能体对比（每次请求携带的技能列表、30 天技能调用、请求数与输入 token、技能列表占输入的比例、重复登记）、
   各智能体的技能列表条形、最近 30 天调用或 token 用量（按智能体堆叠）、最常用技能，以及按分类、按来源或完整
-  列表展示的所有技能。点击对比表中的某行也会只看该智能体。
+  列表展示的所有技能。点击对比表中的某行也会只看该智能体。点击技能行的调用方式会跳到调用方式页面中的该技能。
+- **调用方式**：按智能体修改技能的调用方式（自动 · 仅手动 · 关闭）。见下文。
 - **使用说明与概念**：用图表说明技能的调用流程、消耗 token 的两种方式、调用方式、技能所在位置与优先级、数字从何
   而来、各编码智能体的收集方式、精确计算时 API 密钥放在哪里，并附有术语表和清理方法。概览上的每个 `?` 按钮都可
   直接跳到对应说明。
@@ -235,6 +251,37 @@ node ~/.claude/skill-policy/skill-stats.mjs serve   # 不需要本仓库，用�
 { "origins": { "my-notes": "https://github.com/me/notes-skill" }, "categories": { "my-notes": "research" } }
 ```
 
+### 调用方式页面
+
+每个技能都有**基准**（你决定的值，`policy.json`）和**实际值**（各智能体从自己的设置文件中读取的值）。此页面会同时修改两者。
+
+- **按智能体**：用每行的分段按钮直接修改全局值。项目例外通过行上的标签或“+ 项目例外”添加，可选“仅自己”（本机，
+  `settings.local.json`）或“团队共享”（仓库中的 `settings.json`，提交后同事才会获得）。在上方“编辑范围”中选择一个
+  项目，就能以该项目的视角查看并修改整个列表。
+- **按技能 · 所有智能体**：一次性在所有智能体中修改同一个技能。若包含无法通过设置设为仅手动的智能体（Codex、Qwen Code、
+  ZCode），需要选择“跳过”或“改为关闭”。
+- **批量操作**：勾选行，Shift+点击选择范围。推荐按钮可一键加入“待清理 → 仅手动”“关闭重复副本”。
+- **汇总应用**：修改会汇集到变更列表，预览中按文件显示修改前后。应用前会把要修改的文件备份到
+  `~/.claude/skill-policy/backups/`，只要有一个文件失败，已写入的文件也会恢复。“撤销”可取消上次应用（之后文件
+  又被修改时会拒绝）。
+- **与基准不同**：在外部（升级、`/skills` 界面）被修改的设置会显示红框，可选择“恢复为基准”或“采用当前值”。不在基准
+  中的技能只显示实际值，不做修改。
+- **已锁定**：插件技能（只能整体开关插件）、SKILL.md 设为仅手动的技能（不能改为自动）、管理员策略（`managed-settings.json`）
+  固定的值、Qwen 的 `skills.disabled`、Kimi Code（没有设置）都无法修改，页面会说明原因。
+
+| 智能体 | 全局 | 项目 · 团队共享 | 项目 · 仅自己 | 值 |
+| --- | --- | --- | --- | --- |
+| Claude Code | `~/.claude/settings.json` `skillOverrides` | `.claude/settings.json` | `.claude/settings.local.json` | 自动 · 仅手动 · 关闭 |
+| CodeBuddy Code | `~/.codebuddy/settings.json` | `.codebuddy/settings.json` | `.codebuddy/settings.local.json` | 同上 |
+| Qwen Code | `~/.qwen/settings.json` `skills.defaultDisabled` | `.qwen/settings.json`（`enabled`、`defaultDisabled`） | 无 | 自动 · 关闭 |
+| Codex | `~/.codex/config.toml` `[[skills.config]]`（按路径） | 测试后开启 | 无 | 自动 · 关闭 |
+| ZCode | `~/.zcode/cli/config.json`（按路径） | `.zcode/config.json` | 无 | 自动 · 关闭 |
+| Kimi Code | 无（仅查看） | – | – | – |
+
+只有此页面可以修改设置：服务器启动时生成随机令牌并放入页面，只接受带该令牌、`localhost` Host 且正文为 JSON 的请求。
+要写入的文件路径由服务器决定。新建的“仅自己”文件会加入 `.git/info/exclude`。设计与调研记录见
+[docs/design/skill-modes.md](design/skill-modes.md)（韩文）。
+
 ### 各编码智能体的收集方式
 
 无需额外开启。收集器会读取本机上找到的所有智能体的记录，只要用过某个智能体，下次收集时就会出现在概览中。
@@ -243,6 +290,9 @@ node ~/.claude/skill-policy/skill-stats.mjs serve   # 不需要本仓库，用�
 | --- | --- | --- | --- |
 | Claude Code | `~/.claude/projects/**/*.jsonl` | Skill 工具调用；输入 `/名称` 后注入的 SKILL.md 正文 | 根据设置（`skillOverrides`）和 SKILL.md 计算 |
 | Codex | `$CODEX_HOME/sessions/**/*.jsonl`、`archived_sessions`（默认 `~/.codex`） | 用 shell 读取 SKILL.md、注入的 `<skill>`、消息中的 `$名称`（每轮只计一次） | 上次会话实际发送的 `<skills_instructions>` 列表 |
+| CodeBuddy Code | `~/.codebuddy/projects/**/*.jsonl`（Claude Code 格式） | 与 Claude Code 相同 | 根据设置（`skillOverrides`）和 SKILL.md 计算 |
+| Qwen Code | 尚未读取 | – | 根据 `~/.qwen/skills` 和 `skills.*` 设置估算 |
+| ZCode、Kimi Code（应用） | 尚未读取 | – | 根据共享文件夹 `~/.agents/skills` 估算 |
 | Gemini CLI | `~/.gemini/tmp/*/chats/session-*.json` | `activate_skill` 工具、用 `read_file` 读取 SKILL.md | 根据 `~/.gemini/skills`、`<项目>/.gemini/skills` 估算 |
 | GitHub Copilot CLI（实验性） | `~/.copilot/session-state/**/*.jsonl` | 名为 `skill` 的工具调用、读取 SKILL.md | 根据 `~/.copilot/skills`、`<项目>/.github/skills` 估算 |
 

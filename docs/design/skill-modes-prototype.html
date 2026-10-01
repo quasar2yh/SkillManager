@@ -1,0 +1,1184 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>호출 방식 · 스킬 대시보드 (시안)</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 22 22'%3E%3Crect x='1' y='12' width='4' height='9' rx='1' fill='%23b35c08'/%3E%3Crect x='7' y='7' width='4' height='14' rx='1' fill='%23b35c08'/%3E%3Crect x='13' y='3' width='4' height='18' rx='1' fill='%230a766c'/%3E%3C/svg%3E">
+<style>
+  /* ---------- tokens: the same as kit/user/skill-dashboard.html ---------- */
+  /* amber = costs tokens on every request (auto), teal = only when called (manual), hollow = off.
+     Agent colors: four validated slots; the other agents carry a name badge only. */
+  :root {
+    --paper: #f3f4f7; --surface: #ffffff; --raised: #f8f9fb; --ink: #14161b; --ink-2: #3a404c; --muted: #5b6270; --faint: #8a919e;
+    --line: #e2e5ea; --line-2: #cfd4dc; --accent: #2f4bc0; --accent-soft: #e8ecfb;
+    --always: #b35c08; --always-soft: #fbead6; --always-hatch: #e7b77f;
+    --onuse: #0a766c; --onuse-soft: #dbf1ed;
+    --warn: #b8392d; --warn-soft: #fbe3df;
+    --bar: #c8cdd6; --bar-2: #e4e7ec;
+    --ag-claude: #2a78d6; --ag-codex: #e87ba4; --ag-codebuddy: #4a3aa7; --ag-qwen: #008300;
+    --shadow: 0 1px 2px rgb(20 22 27 / .06), 0 8px 24px rgb(20 22 27 / .08);
+    --shadow-lg: 0 2px 6px rgb(20 22 27 / .08), 0 18px 48px rgb(20 22 27 / .16);
+    --font: "Pretendard Variable", "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+    --mono: "JetBrains Mono", "Cascadia Mono", "D2Coding", Consolas, ui-monospace, monospace;
+    --fs-xs: 12.5px; --fs-sm: 13.5px; --fs-base: 15px; --fs-md: 17px; --fs-lg: 21px; --fs-xl: 30px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0d0f13; --surface: #15181e; --raised: #1a1e25; --ink: #e9ebf0; --ink-2: #c4c9d2; --muted: #9ba2af; --faint: #6f7683;
+      --line: #252a33; --line-2: #343a46; --accent: #9aabff; --accent-soft: #1d2441;
+      --always: #f2a54e; --always-soft: #3a2913; --always-hatch: #8c5b25;
+      --onuse: #3fc4b5; --onuse-soft: #12302c;
+      --warn: #f47c70; --warn-soft: #3b1b18;
+      --bar: #3a404b; --bar-2: #262b33;
+      --ag-claude: #3987e5; --ag-codex: #d55181; --ag-codebuddy: #9085e9; --ag-qwen: #008300;
+      --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 10px 28px rgb(0 0 0 / .45);
+      --shadow-lg: 0 2px 6px rgb(0 0 0 / .5), 0 20px 50px rgb(0 0 0 / .6);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0d0f13; --surface: #15181e; --raised: #1a1e25; --ink: #e9ebf0; --ink-2: #c4c9d2; --muted: #9ba2af; --faint: #6f7683;
+    --line: #252a33; --line-2: #343a46; --accent: #9aabff; --accent-soft: #1d2441;
+    --always: #f2a54e; --always-soft: #3a2913; --always-hatch: #8c5b25;
+    --onuse: #3fc4b5; --onuse-soft: #12302c;
+    --warn: #f47c70; --warn-soft: #3b1b18;
+    --bar: #3a404b; --bar-2: #262b33;
+    --ag-claude: #3987e5; --ag-codex: #d55181; --ag-codebuddy: #9085e9; --ag-qwen: #008300;
+    --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 10px 28px rgb(0 0 0 / .45);
+    --shadow-lg: 0 2px 6px rgb(0 0 0 / .5), 0 20px 50px rgb(0 0 0 / .6);
+    color-scheme: dark;
+  }
+
+  /* ---------- base (dashboard) ---------- */
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 84px; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: var(--fs-base)/1.65 var(--font); letter-spacing: -0.005em; word-break: keep-all; overflow-wrap: anywhere; -webkit-font-smoothing: antialiased; }
+  h1, h2, h3, h4 { margin: 0; line-height: 1.3; text-wrap: balance; letter-spacing: -0.015em; }
+  h2 { font-size: var(--fs-lg); font-weight: 700; }
+  h3 { font-size: var(--fs-md); font-weight: 650; }
+  p { margin: 0; text-wrap: pretty; }
+  code, .mono { font-family: var(--mono); font-size: .92em; }
+  code { background: var(--raised); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  [hidden] { display: none !important; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .btn { border: 1px solid var(--line-2); background: var(--surface); border-radius: 8px; padding: 7px 14px; font-size: var(--fs-sm); font-weight: 600; white-space: nowrap; }
+  .btn:hover:not(:disabled) { border-color: var(--ink-2); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  .btn.primary:hover:not(:disabled) { background: var(--ink-2); }
+  .link { border: 0; background: none; padding: 0; color: var(--accent); font-size: inherit; font-weight: 600; }
+  .link:hover { text-decoration: underline; text-underline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+
+  .topbar { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+  .topbar-in { max-width: 1320px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 750; font-size: var(--fs-md); white-space: nowrap; }
+  .brand .draft { font-size: 11.5px; font-weight: 650; color: var(--muted); border: 1px dashed var(--line-2); border-radius: 999px; padding: 1px 9px; }
+  nav.pages { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+  nav.pages a { text-decoration: none; color: var(--muted); font-weight: 600; font-size: var(--fs-sm); padding: 6px 14px; border-radius: 7px; white-space: nowrap; }
+  nav.pages a[aria-current="page"] { background: var(--ink); color: var(--paper); }
+  nav.pages a:not([aria-current="page"]):hover { color: var(--ink); background: var(--raised); }
+  .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .stamp { color: var(--faint); font-size: var(--fs-xs); margin-right: 4px; }
+
+  main { max-width: 1320px; margin: 0 auto; padding: 24px 20px 120px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; min-width: 0; }
+  .panel-head { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; margin-bottom: 4px; }
+  .lead { color: var(--muted); font-size: var(--fs-sm); max-width: 82ch; }
+  .pill { display: inline-block; font-size: 11.5px; font-weight: 650; color: var(--muted); border: 1px solid var(--line-2); border-radius: 999px; padding: 0 8px; line-height: 1.7; white-space: nowrap; }
+  .pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+  .seg-ctl { display: inline-flex; background: var(--raised); border: 1px solid var(--line); border-radius: 9px; padding: 3px; gap: 2px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .seg-ctl button { border: 0; background: none; border-radius: 6px; padding: 6px 12px; font-size: var(--fs-sm); font-weight: 600; color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
+  .seg-ctl button[aria-pressed="true"], .seg-ctl button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+  .seg-ctl button .n { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+  select { font: inherit; font-size: var(--fs-sm); color: var(--ink); background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px; padding: 6px 10px; }
+  .search { flex: 1 1 220px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line-2); border-radius: 9px; padding: 0 12px; background: var(--surface); }
+  .search:focus-within { border-color: var(--accent); }
+  .search input { border: 0; outline: 0; background: none; font: inherit; font-size: var(--fs-sm); padding: 8px 0; width: 100%; color: var(--ink); }
+  .search svg { color: var(--faint); flex: none; }
+  .flag { display: inline-block; font-size: var(--fs-xs); font-weight: 650; color: var(--warn); background: var(--warn-soft); border-radius: 999px; padding: 1px 9px; white-space: nowrap; }
+  .flag.soft { color: var(--ink-2); background: var(--bar-2); }
+  .key { width: 10px; height: 10px; border-radius: 3px; flex: none; display: inline-block; }
+  .key.always { background: var(--always); } .key.onuse { background: var(--onuse); } .key.warn { background: var(--warn); } .key.ink { background: var(--ink-2); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; display: inline-block; }
+  .dot.auto { background: var(--always); } .dot.manual { background: var(--onuse); } .dot.off { border: 1.5px solid var(--faint); }
+
+  /* agent badge: colored dot for the four color slots, outlined monogram for the rest; the name is always shown */
+  .ag { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .ag .m { display: inline-grid; place-items: center; width: 10px; height: 10px; border-radius: 50%; background: var(--c); flex: none; }
+  .ag.plain .m { width: auto; height: 16px; border-radius: 4px; background: none; border: 1px solid var(--line-2); color: var(--muted); font: 700 9.5px/1 var(--mono); padding: 0 3px; letter-spacing: 0; }
+
+  /* ---------- summary cards (dashboard) ---------- */
+  .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  @media (max-width: 1080px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 520px) { .summary { grid-template-columns: 1fr; } }
+  .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; display: grid; gap: 6px; align-content: start; }
+  .stat-label { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); font-weight: 650; color: var(--ink-2); }
+  .stat-value { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .stat-value .num { font-size: 26px; font-weight: 700; line-height: 1.15; }
+  .stat-value .from { font-family: var(--mono); color: var(--faint); font-size: var(--fs-md); text-decoration: line-through; text-decoration-thickness: 1px; }
+  .stat-value .unit { color: var(--muted); font-size: var(--fs-sm); }
+  .stat-value .delta { font-family: var(--mono); font-size: var(--fs-sm); font-weight: 650; color: var(--onuse); }
+  .stat-note { color: var(--muted); font-size: var(--fs-sm); line-height: 1.55; }
+  .stat-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
+
+  /* ---------- view bar ---------- */
+  .viewbar { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; }
+  .viewbar > .lbl { font-size: var(--fs-sm); font-weight: 650; color: var(--ink-2); }
+  .viewbar .spacer { flex: 1; }
+
+  /* ---------- workspace: list + change list ---------- */
+  .work { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; align-items: start; }
+  @media (max-width: 1100px) { .work { grid-template-columns: minmax(0, 1fr); } }
+
+  .agent-head { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; }
+  .agent-head h2 { display: flex; align-items: center; gap: 10px; }
+  .caps { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--muted); font-size: var(--fs-sm); margin: 6px 0 14px; }
+  .caps b { color: var(--ink-2); font-weight: 650; }
+  .scopebar { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; align-items: center; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .scopebar label { font-size: var(--fs-sm); font-weight: 700; color: var(--ink-2); }
+  .scopebar .scope-desc { grid-column: 2; font-size: var(--fs-xs); color: var(--muted); }
+  .scopebar .scope-desc code { font-size: 11.5px; }
+  .scopebar select { max-width: 100%; font-weight: 650; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; margin: 14px 0 6px; }
+  .count { margin-left: auto; color: var(--muted); font-size: var(--fs-sm); }
+  .recs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 8px; }
+  .recs > span { font-size: var(--fs-xs); color: var(--muted); font-weight: 700; letter-spacing: .02em; }
+  .rec { border: 1px dashed var(--line-2); background: none; border-radius: 999px; padding: 5px 13px; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-2); display: inline-flex; gap: 8px; align-items: center; }
+  .rec:hover { border-color: var(--accent); color: var(--accent); }
+  .rec .tok { font-family: var(--mono); color: var(--onuse); font-weight: 650; }
+  .notice { display: flex; gap: 10px 14px; align-items: center; flex-wrap: wrap; border-radius: 10px; padding: 10px 14px; font-size: var(--fs-sm); margin: 6px 0; }
+  .notice.warn { background: var(--warn-soft); color: var(--ink); }
+  .notice.warn b { color: var(--warn); }
+  .notice.ro { background: var(--raised); border: 1px solid var(--line); color: var(--ink-2); }
+  .notice.team { background: var(--accent-soft); color: var(--ink); }
+  .notice .acts { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* selection bar (replaces the toolbar while rows are selected) */
+  .selbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; background: var(--ink); color: var(--paper); border-radius: 10px; padding: 8px 10px 8px 14px; margin: 14px 0 6px; }
+  .selbar b { font-weight: 700; }
+  .selbar .scope-note { font-size: var(--fs-xs); opacity: .75; }
+  .selbar .btns { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .selbar .btn { background: color-mix(in srgb, var(--paper) 10%, transparent); color: var(--paper); border-color: color-mix(in srgb, var(--paper) 25%, transparent); display: inline-flex; gap: 7px; align-items: center; }
+  .selbar .btn:hover { border-color: var(--paper); }
+  .selbar .btn:disabled { opacity: .4; }
+  .selbar .fallback { display: flex; gap: 12px; align-items: center; font-size: var(--fs-xs); flex-basis: 100%; }
+  .selbar .fallback label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+
+  /* groups (dashboard ledger) */
+  .group { border-top: 1px solid var(--line); }
+  .group:first-of-type { border-top: 0; }
+  .group > summary { list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 14px 2px 10px; }
+  .group > summary::-webkit-details-marker { display: none; }
+  .group > summary .caret { width: 18px; height: 18px; color: var(--faint); transition: transform .15s; flex: none; }
+  .group[open] > summary .caret { transform: rotate(90deg); }
+  .group > summary h3 { font-size: var(--fs-md); }
+  .group > summary .hint { color: var(--muted); font-size: var(--fs-sm); }
+  .group > summary .facts { margin-left: auto; display: flex; gap: 12px; align-items: center; color: var(--muted); font-size: var(--fs-sm); white-space: nowrap; }
+  .group > summary .facts b { color: var(--ink); font-family: var(--mono); font-weight: 650; }
+  .gsel { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+
+  /* skill rows */
+  .rows { display: grid; }
+  .srow { display: grid; grid-template-columns: 22px minmax(0, 1.5fr) 74px minmax(290px, auto); gap: 6px 16px; align-items: center; padding: 12px 10px; border-top: 1px solid var(--line); border-radius: 8px; }
+  .srow:hover { background: var(--raised); }
+  .srow.sel { background: color-mix(in srgb, var(--accent-soft) 75%, var(--surface)); }
+  .srow > input { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+  .sk-name { font-family: var(--mono); font-weight: 650; font-size: var(--fs-base); display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap; }
+  .sk-sum { color: var(--muted); font-size: var(--fs-sm); line-height: 1.5; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  .sk-meta { color: var(--faint); font-size: var(--fs-xs); margin-top: 2px; display: flex; gap: 2px 10px; flex-wrap: wrap; }
+  .sk-meta .path { font-family: var(--mono); }
+  .tok { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 650; text-align: right; font-size: var(--fs-sm); }
+  .tok.always { color: var(--always); }
+  .tok.zero { color: var(--faint); font-weight: 400; }
+  .tok small { display: block; font-family: var(--font); font-weight: 400; color: var(--faint); font-size: 11px; }
+  .srow .extras { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+  /* mode segmented control: the one new part */
+  .modeseg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 9px; padding: 2px; gap: 2px; background: var(--surface); justify-self: end; }
+  .modeseg button { border: 0; background: none; border-radius: 7px; padding: 5px 10px; font-size: var(--fs-sm); font-weight: 600; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; position: relative; }
+  .modeseg button:hover:not([aria-disabled="true"]) { color: var(--ink); background: var(--raised); }
+  .modeseg button[aria-checked="true"] { color: var(--ink); background: var(--raised); box-shadow: inset 0 0 0 1.5px var(--ink-2); }
+  .modeseg button[aria-checked="true"].inh { box-shadow: inset 0 0 0 1.5px var(--line-2); color: var(--ink-2); }
+  .modeseg button[aria-disabled="true"] { opacity: .38; cursor: not-allowed; }
+  .modeseg button .sub { font-size: 11px; color: var(--faint); font-weight: 500; }
+  .modeseg.pending { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .modeseg.drift { border-color: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
+  .modeseg.locked button[aria-checked="true"] { box-shadow: inset 0 0 0 1.5px var(--line-2); }
+  .modeseg .lock { font-size: 12px; padding: 0 4px 0 6px; align-self: center; }
+  .was { font-size: var(--fs-xs); color: var(--faint); text-decoration: line-through; margin-right: 6px; }
+
+  /* exception chips */
+  .xchip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line-2); background: var(--surface); border-radius: 999px; padding: 2px 10px 2px 8px; font-size: var(--fs-xs); font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+  .xchip:hover { border-color: var(--ink-2); }
+  .xchip .layer { color: var(--faint); font-weight: 600; }
+  .xchip.team { border-style: solid; background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+  .xchip.team .layer { color: var(--accent); }
+  .xchip.pending { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .xchip.drift { border-color: var(--warn); }
+  .xchip.unmanaged { border-style: dashed; }
+  .xchip.dirty::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-left: 2px; }
+  .xadd { border: 1px dashed var(--line-2); background: none; border-radius: 999px; padding: 0 9px; font-size: 11.5px; font-weight: 650; color: var(--muted); line-height: 1.7; }
+  .xadd:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* cross-agent table */
+  .xtable-wrap { overflow-x: auto; margin: 6px -4px 0; padding: 0 4px; }
+  table.xt { width: 100%; border-collapse: collapse; min-width: 860px; }
+  table.xt th { text-align: left; font-size: var(--fs-xs); font-weight: 650; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line-2); white-space: nowrap; vertical-align: top; }
+  table.xt th .pill { margin-top: 4px; }
+  table.xt td.first, table.xt th.first { min-width: 270px; }
+  table.xt .sk-name { overflow-wrap: normal; word-break: normal; }
+  table.xt td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: middle; font-size: var(--fs-sm); }
+  table.xt tr:hover td { background: var(--raised); }
+  table.xt tr.sel td { background: color-mix(in srgb, var(--accent-soft) 75%, var(--surface)); }
+  table.xt td.first, table.xt th.first { position: sticky; left: 0; background: var(--surface); z-index: 1; }
+  table.xt tr:hover td.first { background: var(--raised); }
+  table.xt tr.sel td.first { background: color-mix(in srgb, var(--accent-soft) 75%, var(--surface)); }
+  .xcell { display: inline-flex; align-items: center; gap: 6px; border: 1.5px solid transparent; border-radius: 8px; padding: 4px 9px; background: none; font-size: var(--fs-sm); font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+  .xcell:hover:not(:disabled) { border-color: var(--line-2); }
+  .xcell.pending { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+  .xcell.drift { border-color: var(--warn); }
+  .xcell.locked { color: var(--faint); }
+  .xcell .copies { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+  .na { color: var(--faint); }
+
+  /* change list */
+  .cart { position: sticky; top: 84px; display: grid; gap: 12px; max-height: calc(100vh - 104px); overflow: auto; padding: 18px; }
+  .cart h2 { font-size: var(--fs-md); display: flex; align-items: center; gap: 8px; }
+  .cart h2 .n { font-family: var(--mono); font-size: var(--fs-sm); color: var(--paper); background: var(--ink); border-radius: 999px; padding: 0 8px; }
+  .cart .empty { color: var(--muted); font-size: var(--fs-sm); line-height: 1.6; padding: 6px 0 2px; }
+  .tokdelta { display: grid; gap: 4px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--raised); }
+  .tokdelta div { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); }
+  .tokdelta .v { margin-left: auto; font-family: var(--mono); font-weight: 650; }
+  .tokdelta .v s { color: var(--faint); font-weight: 400; }
+  .tokdelta .v .down { color: var(--onuse); }
+  .tokdelta .v .up { color: var(--always); }
+  .cgroup { display: grid; gap: 4px; }
+  .cgroup > b { font-size: var(--fs-xs); color: var(--muted); display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .citem { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; padding: 7px 8px 7px 10px; border-radius: 8px; border: 1px solid var(--line); }
+  .citem .what { font-family: var(--mono); font-size: var(--fs-sm); font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .citem .where { font-size: var(--fs-xs); color: var(--muted); }
+  .citem .chg { grid-column: 1; font-size: var(--fs-xs); color: var(--ink-2); display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+  .citem .x { grid-row: 1 / span 3; grid-column: 2; border: 0; background: none; color: var(--faint); font-size: 16px; padding: 2px 6px; border-radius: 6px; }
+  .citem .x:hover { color: var(--warn); background: var(--warn-soft); }
+  .cart-actions { display: flex; gap: 8px; }
+  .cart-actions .btn.primary { flex: 1; }
+  .cart-foot { font-size: var(--fs-xs); color: var(--muted); line-height: 1.55; }
+  /* narrow screens: the change list docks at the bottom */
+  .dock { display: none; }
+  @media (max-width: 1100px) {
+    .cart-panel { display: none; }
+    .cart-panel.open { display: grid; position: fixed; inset: auto 8px 72px 8px; z-index: 40; max-height: 65vh; box-shadow: var(--shadow-lg); }
+    .dock { display: flex; position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 41; background: var(--surface); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 8px 8px 8px 14px; gap: 10px; align-items: center; }
+    .dock .sum { font-size: var(--fs-sm); flex: 1; }
+    .dock .sum b { font-family: var(--mono); }
+  }
+
+  /* popover, tooltip, dialog, toast */
+  #pop { position: fixed; z-index: 50; width: min(340px, calc(100vw - 24px)); background: var(--surface); color: var(--ink); border: 1px solid var(--line-2); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 14px; display: grid; gap: 10px; }
+  #pop h4 { font-size: var(--fs-base); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #pop h4 .mono { font-weight: 700; }
+  #pop .field { display: grid; gap: 5px; }
+  #pop .field > span { font-size: var(--fs-xs); font-weight: 700; color: var(--muted); }
+  #pop .layers { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #pop .layers label { border: 1px solid var(--line-2); border-radius: 9px; padding: 7px 10px; font-size: var(--fs-sm); font-weight: 650; cursor: pointer; display: grid; gap: 1px; }
+  #pop .layers label small { font-weight: 400; color: var(--muted); font-size: 11.5px; }
+  #pop .layers label:has(input:checked) { border-color: var(--ink-2); background: var(--raised); }
+  #pop .layers input { position: absolute; opacity: 0; pointer-events: none; }
+  #pop .layers label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #pop .opts { display: grid; gap: 2px; }
+  #pop .opt { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 2px 8px; align-items: center; border: 0; background: none; border-radius: 8px; padding: 7px 8px; text-align: left; font-size: var(--fs-sm); font-weight: 600; }
+  #pop .opt:hover:not(:disabled) { background: var(--raised); }
+  #pop .opt[aria-checked="true"] { background: var(--raised); box-shadow: inset 0 0 0 1.5px var(--ink-2); }
+  #pop .opt:disabled { cursor: not-allowed; color: var(--faint); }
+  #pop .opt .why { grid-column: 2; font-size: var(--fs-xs); font-weight: 400; color: var(--faint); line-height: 1.45; }
+  #pop .opt .hint { font-weight: 400; color: var(--faint); font-size: var(--fs-xs); }
+  #pop .note { font-size: var(--fs-xs); color: var(--muted); line-height: 1.55; border-top: 1px solid var(--line); padding-top: 8px; }
+  #pop .foot { display: flex; gap: 8px; justify-content: space-between; align-items: center; }
+  #tip { position: fixed; z-index: 60; max-width: 300px; background: var(--surface); color: var(--ink); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: var(--shadow); padding: 8px 11px; font-size: var(--fs-sm); line-height: 1.5; pointer-events: none; white-space: pre-line; }
+  dialog { border: 1px solid var(--line-2); border-radius: 16px; padding: 0; width: min(780px, calc(100vw - 24px)); max-height: calc(100vh - 48px); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-lg); }
+  dialog::backdrop { background: rgb(10 12 16 / .45); }
+  .dlg { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; max-height: calc(100vh - 50px); }
+  .dlg header { padding: 18px 22px 14px; border-bottom: 1px solid var(--line); display: grid; gap: 4px; }
+  .dlg header p { color: var(--muted); font-size: var(--fs-sm); }
+  .dlg .body { overflow: auto; padding: 16px 22px; display: grid; gap: 12px; }
+  .dlg footer { padding: 12px 22px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+  .dlg footer .hint { margin-right: auto; font-size: var(--fs-xs); color: var(--muted); }
+  .dlg .err { border-radius: 10px; background: var(--warn-soft); color: var(--ink); padding: 10px 14px; font-size: var(--fs-sm); display: grid; gap: 4px; }
+  .dlg .err b { color: var(--warn); }
+  .file { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .file h3 { font-size: var(--fs-sm); padding: 9px 12px; background: var(--raised); border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .file h3 code { background: none; border: 0; padding: 0; font-size: 12.5px; }
+  .role { font-family: var(--font); font-size: 11.5px; font-weight: 700; border-radius: 999px; padding: 0 8px; line-height: 1.7; }
+  .role.policy { color: var(--accent); background: var(--accent-soft); }
+  .role.mine { color: var(--ink-2); background: var(--bar-2); }
+  .role.team { color: var(--always); background: var(--always-soft); }
+  .file ul { list-style: none; margin: 0; padding: 6px 0; font-family: var(--mono); font-size: 12.5px; }
+  .file li { padding: 3px 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .file li .from { color: var(--warn); }
+  .file li .to { color: var(--onuse); }
+  .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--paper) 35%, transparent); border-top-color: var(--paper); display: inline-block; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #toast { position: fixed; left: 50%; top: 76px; transform: translateX(-50%); z-index: 70; background: var(--ink); color: var(--paper); border-radius: 10px; padding: 10px 14px; font-size: var(--fs-sm); display: flex; gap: 12px; align-items: center; box-shadow: var(--shadow-lg); max-width: calc(100vw - 24px); }
+  #toast button { border: 0; background: none; color: inherit; font-weight: 700; padding: 0; text-decoration: underline; text-underline-offset: 3px; }
+  .skel { height: 58px; border-radius: 8px; background: linear-gradient(90deg, var(--raised), var(--bar-2), var(--raised)); background-size: 200% 100%; animation: sh 1.2s ease-in-out infinite; margin: 8px 0; }
+  @keyframes sh { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+  .empty-state { text-align: center; color: var(--muted); font-size: var(--fs-sm); padding: 28px 12px; display: grid; gap: 6px; justify-items: center; }
+  .empty-state b { color: var(--ink); font-size: var(--fs-base); }
+
+  @media (max-width: 760px) {
+    .topbar { position: static; }
+    .topbar-in { gap: 10px 12px; padding: 10px 16px; }
+    .topbar-right { margin-left: 0; width: 100%; }
+    main { padding: 16px 12px 110px; }
+    .panel { padding: 16px 14px; }
+    .srow { grid-template-columns: 22px minmax(0, 1fr) auto; }
+    .srow .modeseg { grid-column: 1 / -1; justify-self: stretch; }
+    .srow .modeseg button { flex: 1; justify-content: center; }
+    .srow .extras { grid-column: 1 / -1; }
+    .scopebar { grid-template-columns: minmax(0, 1fr); }
+    .scopebar .scope-desc { grid-column: 1; }
+    .group > summary .facts { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-in">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="1" y="12" width="4" height="9" rx="1" fill="var(--always)"/><rect x="7" y="7" width="4" height="14" rx="1" fill="var(--always)"/><rect x="13" y="3" width="4" height="18" rx="1" fill="var(--onuse)"/><rect x="19" y="9" width="2" height="12" rx="1" fill="var(--bar)"/></svg>
+      스킬 대시보드 <span class="draft">설계 시안 · 예시 데이터</span>
+    </div>
+    <nav class="pages" aria-label="페이지"><a href="#" data-soon="현황판">현황판</a><a href="#" aria-current="page">호출 방식</a><a href="#" data-soon="사용법·개념">사용법·개념</a></nav>
+    <div class="topbar-right">
+      <span class="stamp">9월 30일 오전 12:20 수집</span>
+      <button class="btn" id="theme">테마: 자동</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="viewbar" aria-label="보기">
+    <span class="lbl">보기</span>
+    <div class="seg-ctl" id="views" role="tablist" aria-label="보기 방식">
+      <button role="tab" data-view="agent">에이전트별</button>
+      <button role="tab" data-view="skill">스킬별 · 모든 에이전트</button>
+    </div>
+    <div class="seg-ctl" id="agents" role="tablist" aria-label="코딩 에이전트"></div>
+  </section>
+
+  <section class="summary" id="summary" aria-label="요약"></section>
+
+  <div class="work">
+    <section class="panel" id="mainpanel" aria-live="polite"></section>
+    <aside class="panel cart cart-panel" id="cart" aria-label="변경 목록"></aside>
+  </div>
+</main>
+
+<div class="dock" id="dock"></div>
+<div id="pop" hidden></div>
+<div id="tip" role="tooltip" hidden></div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+<dialog id="dlg" aria-labelledby="dlg-t">
+  <div class="dlg">
+    <header><h2 id="dlg-t">변경 미리보기</h2><p id="dlg-sub"></p></header>
+    <div class="body" id="dlg-body"></div>
+    <footer><span class="hint">적용하면 각 파일 옆에 .bak 백업을 남기고, 새 세션부터 반영됩니다.</span><button class="btn" id="dlg-cancel">돌아가기</button><button class="btn primary" id="dlg-apply">적용</button></footer>
+  </div>
+</dialog>
+
+<script>
+// ============ sample data (the shape /api/modes would return) ============
+const MODE = { auto: '자동', manual: '/명시 전용', off: '꺼짐' };
+const SHORT = { auto: '자동', manual: '명시 전용', off: '꺼짐' };
+const PROJECTS = ['my-app', 'api-server', 'blog'];
+const CATS = [
+  ['plan', '기획·설계', '아이디어 정리, 요구사항, 설계와 계획 검토'],
+  ['review', '리뷰·보안·품질', '코드 리뷰, 보안 점검, 성능·품질 확인'],
+  ['ship', '배포·Git', 'PR, 머지, CI, 배포, 릴리스'],
+  ['design', '디자인·UI', '화면 설계, 프로토타입, 시각 자료'],
+  ['docs', '문서·오피스', 'Word, PDF, PowerPoint, Excel'],
+  ['agent', '에이전트·도구 관리', '스킬·플러그인·세션 관리, 안전장치'],
+];
+// policy = my baseline (global, mine); actual = what the agent reads (global, mine, team). Team values live in the repo only.
+const v = (global, mine = {}, team = {}) => ({ global, mine, team });
+const S = (o) => ({ policy: v(), actual: v(), uses: 0, ...o });
+
+const AGENTS = [
+  { id: 'claude', label: 'Claude Code', mono: 'CC', color: true, modes: ['auto', 'manual', 'off'], layers: ['mine', 'team'], projects: PROJECTS,
+    files: { policy: '~/.claude/skill-policy/policy.json', global: '~/.claude/settings.json', mine: (p) => `${p}/.claude/settings.local.json`, team: (p) => `${p}/.claude/settings.json` },
+    caps: ['자동 · /명시 전용 · 꺼짐', '프로젝트 예외: 나만 · 팀 공유', '이름 기준'],
+    skills: [
+      S({ id: 'office-hours', cat: 'plan', src: 'garrytan/gstack', sum: 'YC식 아이디어 점검. 무엇을 만들지 좁힌다.', tokens: 44, policy: v('manual'), actual: v('manual') }),
+      S({ id: 'grilling', cat: 'plan', src: 'mattpocock/skills', only: ['my-app', 'api-server'], sum: '계획이나 결정을 끝까지 캐묻는다.', tokens: 58, uses: 2 }),
+      S({ id: 'grill-me', cat: 'plan', src: 'mattpocock/skills', only: ['my-app', 'api-server'], fm: true, sum: 'grilling을 이름으로 부르는 명시 전용 입구.', tokens: 0, uses: 1 }),
+      S({ id: 'plan-board', cat: 'plan', src: '프로젝트 스킬', only: ['my-app', 'api-server'], sum: '작업 시작·종료 때 계획 보드를 갱신한다.', tokens: 64, uses: 2, actual: v(undefined, {}, { 'api-server': 'off' }) }),
+      S({ id: 'superpowers:brainstorming', cat: 'plan', src: 'superpowers 플러그인', plugin: true, sum: '만들기 전에 의도와 요구사항을 탐색한다.', tokens: 48, uses: 2 }),
+      S({ id: 'review', cat: 'review', src: 'garrytan/gstack', sum: 'PR 전 변경분을 검토한다.', tokens: 41, uses: 2, policy: v('manual', { 'my-app': 'off' }), actual: v('manual', { 'my-app': 'off' }, { 'api-server': 'manual' }) }),
+      S({ id: 'qa', cat: 'review', src: 'garrytan/gstack', sum: '사이트를 직접 돌려 보며 버그를 찾는다.', tokens: 38, policy: v('manual'), actual: v(undefined), driftWhy: 'gstack 업그레이드로 설정이 지워진 것으로 보입니다' }),
+      S({ id: 'investigate', cat: 'review', src: 'garrytan/gstack', sum: '버그의 근본 원인을 조사한다.', tokens: 40, uses: 3 }),
+      S({ id: 'ship', cat: 'ship', src: 'garrytan/gstack', sum: '테스트, 버전, PR까지 배포 흐름을 진행한다.', tokens: 36, uses: 1, policy: v('manual'), actual: v('manual') }),
+      S({ id: 'html', cat: 'design', src: 'plannotator/effective-html', sum: '보고서·설명서를 한 파일 HTML로 만든다.', tokens: 57, uses: 3 }),
+      S({ id: 'design-shotgun', cat: 'design', src: 'garrytan/gstack', sum: '디자인 시안을 여러 개 만들어 비교한다.', tokens: 52, uses: 2, policy: v('manual'), actual: v('manual') }),
+      S({ id: 'docx', cat: 'docs', src: "스킬 세트 'documents'", sum: 'Word 문서를 만들고 고친다.', tokens: 61 }),
+      S({ id: 'pdf', cat: 'docs', src: "스킬 세트 'documents'", sum: 'PDF를 읽고 합치고 나눈다.', tokens: 58, actual: v(undefined, { 'api-server': 'off' }), note: 'api-server에서 Claude Code /skills로 끔' }),
+      S({ id: 'skill-sets', cat: 'agent', src: 'Project_Template', sum: '스킬 세트를 설치하고 켜고 끈다.', tokens: 45, uses: 1, policy: v('auto'), actual: v() }),
+      S({ id: 'careful', cat: 'agent', src: 'garrytan/gstack', sum: '위험한 명령 전에 경고한다.', tokens: 30 }),
+      S({ id: 'superpowers:writing-skills', cat: 'agent', src: 'superpowers 플러그인', plugin: true, sum: '스킬을 만들고 검증한다.', tokens: 35 }),
+    ] },
+  { id: 'codex', label: 'Codex', mono: 'CX', color: true, modes: ['auto', 'off'], layers: ['team'], projects: ['api-server'], trial: true, key: 'path',
+    files: { policy: '~/.claude/skill-policy/policy.json', global: '~/.codex/config.toml', team: (p) => `${p}/.codex/config.toml` },
+    caps: ['자동 · 꺼짐', '프로젝트 예외: 프로젝트 파일 (시험 중)', '경로 기준 (사본 하나씩)'],
+    why: { manual: 'Codex는 설정으로 명시 전용을 정할 수 없습니다. 스킬 폴더 안에 agents/openai.yaml을 둬야 하고, 업데이트 때 사라집니다.' },
+    skills: [
+      S({ id: 'grilling', cat: 'plan', src: 'mattpocock/skills', path: '~/.agents/skills/grilling', shared: true, sum: '계획이나 결정을 끝까지 캐묻는다.', tokens: 60, uses: 1 }),
+      S({ id: 'grill-me', cat: 'plan', src: 'mattpocock/skills', path: '~/.agents/skills/grill-me', shared: true, sum: 'grilling을 이름으로 부르는 명시 전용 입구.', tokens: 18, uses: 1 }),
+      S({ id: 'autoplan', cat: 'plan', src: 'garrytan/gstack', path: '~/.codex/skills/autoplan', dup: 'autoplan', sum: '계획 검토를 한 번에 돌린다.', tokens: 37 }),
+      S({ id: 'autoplan#2', name: 'autoplan', cat: 'plan', src: 'garrytan/gstack', path: '~/.codex/skills/gstack/autoplan', dup: 'autoplan', extra: true, sum: '계획 검토를 한 번에 돌린다.', tokens: 38 }),
+      S({ id: 'superpowers:brainstorming', cat: 'plan', src: 'superpowers (superpowers-dev)', path: '…/superpowers-dev/…/brainstorming', dup: 'sp', sum: '만들기 전에 의도와 요구사항을 탐색한다.', tokens: 40, uses: 3 }),
+      S({ id: 'superpowers:brainstorming#2', name: 'superpowers:brainstorming', cat: 'plan', src: 'superpowers (openai-curated)', path: '…/openai-curated-remote/…/brainstorming', dup: 'sp', extra: true, sum: '만들기 전에 의도와 요구사항을 탐색한다.', tokens: 40 }),
+      S({ id: 'grill-with-docs', cat: 'plan', src: '프로젝트 스킬', path: 'api-server/.agents/skills/grill-with-docs', only: ['api-server'], sum: '캐묻고 결정을 문서로 남긴다.', tokens: 50, uses: 4 }),
+      S({ id: 'review', cat: 'review', src: 'garrytan/gstack', path: '~/.codex/skills/review', sum: 'PR 전 변경분을 검토한다.', tokens: 42, policy: v('off'), actual: v('off') }),
+      S({ id: 'browse', cat: 'review', src: 'garrytan/gstack', path: '~/.codex/skills/browse', dup: 'browse', sum: '헤드리스 브라우저로 사이트를 확인한다.', tokens: 36, uses: 1 }),
+      S({ id: 'browse#2', name: 'browse', cat: 'review', src: 'garrytan/gstack', path: '~/.codex/skills/gstack/browse', dup: 'browse', extra: true, sum: '헤드리스 브라우저로 사이트를 확인한다.', tokens: 36 }),
+      S({ id: 'html', cat: 'design', src: 'plannotator/effective-html', path: '~/.agents/skills/html', shared: true, sum: '보고서·설명서를 한 파일 HTML로 만든다.', tokens: 46 }),
+      S({ id: 'imagegen', cat: 'design', src: 'Codex 기본 제공', path: '~/.codex/skills/.system/imagegen', sum: '이미지를 만들거나 고친다.', tokens: 34, uses: 3 }),
+    ] },
+  { id: 'codebuddy', label: 'CodeBuddy Code', mono: 'CB', color: true, status: '로그인 필요', modes: ['auto', 'manual', 'off'], layers: ['mine', 'team'], projects: PROJECTS,
+    files: { policy: '~/.claude/skill-policy/policy.json', global: '~/.codebuddy/settings.json', mine: (p) => `${p}/.codebuddy/settings.local.json`, team: (p) => `${p}/.codebuddy/settings.json` },
+    caps: ['자동 · /명시 전용 · 꺼짐', '프로젝트 예외: 나만 · 팀 공유', 'Claude Code와 같은 방식'],
+    skills: [
+      S({ id: 'grilling', cat: 'plan', src: 'mattpocock/skills', path: '~/.codebuddy/skills/grilling', sum: '계획이나 결정을 끝까지 캐묻는다.', tokens: 58 }),
+      S({ id: 'grill-me', cat: 'plan', src: 'mattpocock/skills', path: '~/.codebuddy/skills/grill-me', fm: true, sum: 'grilling을 이름으로 부르는 명시 전용 입구.', tokens: 0 }),
+    ] },
+  { id: 'qwen', label: 'Qwen Code', mono: 'QW', color: true, status: '로그인 필요', modes: ['auto', 'off'], layers: ['team'], projects: ['my-app'],
+    files: { policy: '~/.claude/skill-policy/policy.json', global: '~/.qwen/settings.json', team: (p) => `${p}/.qwen/settings.json` },
+    caps: ['자동 · 꺼짐', '프로젝트 예외: 프로젝트 파일', '이름 기준 · 전역 꺼짐은 기본만 끔 (프로젝트에서 되살릴 수 있음)'],
+    why: { manual: 'Qwen Code는 SKILL.md 앞머리로만 명시 전용을 정할 수 있습니다.' },
+    skills: [
+      S({ id: 'grilling', cat: 'plan', src: 'mattpocock/skills', path: '~/.qwen/skills/grilling', sum: '계획이나 결정을 끝까지 캐묻는다.', tokens: 58 }),
+      S({ id: 'grill-me', cat: 'plan', src: 'mattpocock/skills', path: '~/.qwen/skills/grill-me', fm: true, sum: 'grilling을 이름으로 부르는 명시 전용 입구 (Qwen에서는 Manual reference).', tokens: 0 }),
+    ] },
+  { id: 'zcode', label: 'ZCode', mono: 'ZC', status: '앱을 켠 적 없음', modes: ['auto', 'off'], layers: ['team'], projects: ['my-app'], key: 'path',
+    files: { policy: '~/.claude/skill-policy/policy.json', global: '~/.zcode/cli/config.json', team: (p) => `${p}/.zcode/config.json` },
+    caps: ['자동 · 꺼짐', '프로젝트 예외: 프로젝트 파일', '경로 기준'],
+    why: { manual: 'ZCode 설정은 켜기와 끄기만 있습니다.' },
+    skills: ['grilling', 'grill-me', 'html', 'design-artifact', 'html-wireframe', 'html-prototype', 'find-skills', 'browseros-neo']
+      .map((id, i) => S({ id, cat: i < 2 ? 'plan' : i < 6 ? 'design' : 'agent', src: i < 2 ? 'mattpocock/skills' : i < 6 ? 'plannotator/effective-html' : '직접 추가', path: `~/.agents/skills/${id}`, shared: true, sum: ['계획이나 결정을 끝까지 캐묻는다.', 'grilling을 이름으로 부르는 입구.', '보고서·설명서를 한 파일 HTML로 만든다.', '화면 방향(색·글꼴·구성)을 정한다.', '저충실도 와이어프레임을 만든다.', '동작하는 HTML 시안을 만든다.', '필요한 스킬을 찾아 설치한다.', '로그인된 브라우저로 작업한다.'][i], tokens: [60, 18, 46, 44, 40, 41, 35, 60][i] })) },
+  { id: 'kimi', label: 'Kimi Code', mono: 'KM', status: '앱을 켠 적 없음', readOnly: true, modes: [], layers: [], projects: [],
+    files: {}, caps: ['설정으로 바꿀 수 없음'],
+    readOnlyWhy: 'Kimi Code에는 스킬을 켜고 끄는 설정이 없습니다. 명시 전용은 SKILL.md 앞머리(disable-model-invocation)로, 끄기는 스킬 폴더를 옮겨서 합니다. ~/.agents/skills는 Codex·ZCode도 함께 읽으니 옮길 때 조심하세요.',
+    skills: ['grilling', 'grill-me', 'html', 'design-artifact', 'html-wireframe', 'html-prototype', 'find-skills', 'browseros-neo']
+      .map((id, i) => S({ id, cat: i < 2 ? 'plan' : i < 6 ? 'design' : 'agent', src: i < 2 ? 'mattpocock/skills' : i < 6 ? 'plannotator/effective-html' : '직접 추가', path: `~/.agents/skills/${id}`, shared: true, sum: '공유 폴더 스킬', tokens: [60, 18, 46, 44, 40, 41, 35, 60][i] })) },
+];
+const SHARED_BY = 'Codex · Kimi Code · ZCode';
+
+// ============ state ============
+const st = {
+  view: 'agent', agent: 'claude', scope: 'global', filter: 'all', q: '',
+  selected: new Set(), lastIdx: null, fallback: 'skip',
+  staged: new Map(),          // `${agent}|${skill}|${scope}` → { kind: 'set'|'revert'|'adopt', value }
+  undo: null, failOnce: true, teamDirty: new Set(), loading: true, cartOpen: false,
+};
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = (n) => Number(n).toLocaleString('ko-KR');
+const agentBy = (id) => AGENTS.find((a) => a.id === id);
+const A = () => agentBy(st.agent);
+const nameOf = (s) => s.name ?? s.id;
+const skillBy = (a, id) => a.skills.find((s) => s.id === id);
+const K = (a, s, scope) => `${a.id}|${s.id}|${scope}`;
+const agentBadge = (a) => `<span class="ag${a.color ? '' : ' plain'}" style="--c:var(--ag-${a.id})"><span class="m">${a.color ? '' : a.mono}</span>${esc(a.label)}</span>`;
+const dot = (m) => `<span class="dot ${m}"></span>`;
+
+// ============ values ============
+// A scope is 'global', 'p|mine', or 'p|team'.
+const parse = (scope) => (scope === 'global' ? { p: null, layer: 'global' } : { p: scope.split('|')[0], layer: scope.split('|')[1] });
+const applies = (s, p) => !p || !s.only || s.only.includes(p);
+function stored(obj, scope) { const { p, layer } = parse(scope); return layer === 'global' ? obj.global : obj[layer][p]; }
+const polVal = (s, scope) => (parse(scope).layer === 'team' ? undefined : stored(s.policy, scope));
+const actVal = (s, scope) => stored(s.actual, scope);
+const managed = (s, scope) => polVal(s, scope) !== undefined;
+function drifted(s, scope) {
+  if (!managed(s, scope)) return false;
+  const g = scope === 'global';
+  return g ? (polVal(s, scope) ?? 'auto') !== (actVal(s, scope) ?? 'auto') : polVal(s, scope) !== actVal(s, scope);
+}
+const baseVal = (s, scope) => (managed(s, scope) ? polVal(s, scope) : actVal(s, scope));
+function cur(a, s, scope, withStaged = true) {
+  const c = withStaged && st.staged.get(K(a, s, scope));
+  if (!c) return baseVal(s, scope);
+  return c.value === 'inherit' ? undefined : c.value;
+}
+const defaultOf = (s) => (s.fm ? 'manual' : 'auto');
+function clamp(s, m) { if (s.plugin) return 'auto'; if (s.fm && m === 'auto') return 'manual'; return m; }
+function effective(a, s, p, withStaged = true) {
+  const g = cur(a, s, 'global', withStaged);
+  if (!p) return clamp(s, g ?? defaultOf(s));
+  return clamp(s, cur(a, s, `${p}|mine`, withStaged) ?? cur(a, s, `${p}|team`, withStaged) ?? g ?? defaultOf(s));
+}
+// What "따름" resolves to at a layer.
+function inherited(a, s, scope) {
+  const { p, layer } = parse(scope);
+  if (layer === 'mine') return clamp(s, cur(a, s, `${p}|team`) ?? cur(a, s, 'global') ?? defaultOf(s));
+  return clamp(s, cur(a, s, 'global') ?? defaultOf(s));
+}
+function exceptions(a, s, withStaged = true) {
+  const out = [];
+  for (const p of a.projects) for (const layer of a.layers) {
+    const scope = `${p}|${layer}`;
+    const val = cur(a, s, scope, withStaged);
+    const staged = st.staged.has(K(a, s, scope));
+    if (val !== undefined || staged) out.push({ p, layer, scope, val, staged });
+  }
+  return out;
+}
+function whyNot(a, s, scope, value) {
+  if (a.readOnly) return a.readOnlyWhy;
+  if (s.plugin) return '플러그인 스킬은 하나씩 바꿀 수 없습니다. 플러그인 전체를 켜고 끄세요.';
+  const { p, layer } = parse(scope);
+  if (p && !applies(s, p)) return `${p}에는 이 스킬이 없습니다.`;
+  if (layer !== 'global' && !a.layers.includes(layer)) return '이 에이전트에는 이 층이 없습니다.';
+  if (value === 'inherit') return scope === 'global' ? '전역 기본값에는 따를 값이 없습니다.' : '';
+  if (!a.modes.includes(value)) return a.why?.[value] ?? '이 에이전트는 이 값을 지원하지 않습니다.';
+  if (value === 'auto' && s.fm) return 'SKILL.md에 disable-model-invocation: true가 있어 설정으로 자동을 켤 수 없습니다.';
+  return '';
+}
+function stage(a, s, scope, change) {
+  const k = K(a, s, scope);
+  if (change.kind === 'set') {
+    const before = baseVal(s, scope);
+    const target = change.value === 'inherit' ? undefined : change.value;
+    const same = scope === 'global' ? (before ?? 'auto') === (target ?? 'auto') && managed(s, scope) === (target !== undefined) : before === target;
+    if (same && !drifted(s, scope)) { st.staged.delete(k); return true; }
+  }
+  st.staged.set(k, change);
+  return true;
+}
+function trySet(a, s, scope, value) {
+  if (whyNot(a, s, scope, value)) return false;
+  return stage(a, s, scope, { kind: 'set', value });
+}
+const isIdle = (a, s) => !a.readOnly && !s.plugin && s.uses === 0 && effective(a, s, null, false) === 'auto' && s.tokens > 0;
+const isDrift = (a, s) => ['global', ...a.projects.map((p) => `${p}|mine`)].some((sc) => drifted(s, sc));
+const isPending = (a, s) => [...st.staged.keys()].some((k) => k.startsWith(`${a.id}|${s.id}|`));
+const hasExc = (a, s) => exceptions(a, s).length > 0;
+function tokensFor(a, p, withStaged) {
+  return a.skills.filter((s) => (p ? applies(s, p) : !s.only)).reduce((t, s) => t + (effective(a, s, p, withStaged) === 'auto' ? s.tokens : 0), 0);
+}
+
+// ============ rendering ============
+function render() {
+  renderViews(); renderSummary();
+  if (st.view === 'agent') renderAgentPanel(); else renderCrossPanel();
+  renderCart();
+}
+function renderViews() {
+  for (const b of $('views').querySelectorAll('button')) b.setAttribute('aria-selected', String(b.dataset.view === st.view));
+  $('agents').hidden = st.view !== 'agent';
+  $('agents').innerHTML = AGENTS.map((a) => {
+    const pend = [...st.staged.keys()].filter((k) => k.startsWith(`${a.id}|`)).length;
+    return `<button role="tab" aria-selected="${a.id === st.agent}" data-agent="${a.id}">${agentBadge(a)}<span class="n">${a.skills.length}</span>${a.readOnly ? '<span class="pill">보기 전용</span>' : ''}${pend ? `<span class="pill" style="color:var(--accent);border-color:var(--accent)">대기 ${pend}</span>` : ''}</button>`;
+  }).join('');
+}
+function card(color, label, value, note, actions = '') {
+  return `<div class="stat"><div class="stat-label"><i class="key ${color}"></i>${label}</div><div class="stat-value">${value}</div><div class="stat-note">${note}</div>${actions ? `<div class="stat-actions">${actions}</div>` : ''}</div>`;
+}
+function renderSummary() {
+  const list = st.view === 'agent' ? [A()] : AGENTS.filter((a) => !a.readOnly);
+  const now = list.reduce((t, a) => t + tokensFor(a, null, false), 0), next = list.reduce((t, a) => t + tokensFor(a, null, true), 0);
+  const tokValue = now === next ? `<span class="num">${fmt(now)}</span><span class="unit">토큰</span>`
+    : `<span class="from">${fmt(now)}</span><span class="num">${fmt(next)}</span><span class="unit">토큰</span><span class="delta">${next < now ? '−' : '+'}${fmt(Math.abs(now - next))}</span>`;
+  const files = new Set([...st.staged.entries()].flatMap(([k, c]) => targets(k, c).map((t) => t.file)));
+  const drift = AGENTS.flatMap((a) => a.skills.filter((s) => isDrift(a, s)).map((s) => [a, s]));
+  const driftShown = st.view === 'agent' ? drift.filter(([a]) => a.id === st.agent) : drift;
+  const excs = (st.view === 'agent' ? [A()] : AGENTS).flatMap((a) => a.skills.flatMap((s) => exceptions(a, s, false).map((e) => e.layer)));
+  $('summary').innerHTML = [
+    card('always', '요청마다 고정 비용', tokValue, st.view === 'agent' ? `${esc(A().label)} · 모든 프로젝트 공통 목록` : '설정을 바꿀 수 있는 에이전트 합계'),
+    card('ink', '적용 대기', `<span class="num">${st.staged.size}</span><span class="unit">건</span>`, st.staged.size ? `파일 ${files.size}개가 바뀝니다. 적용 전까지 아무것도 쓰지 않습니다.` : '바꾼 값은 오른쪽 변경 목록에 모입니다.'),
+    card('warn', '기준값과 다름', `<span class="num">${driftShown.length}</span><span class="unit">개</span>`, driftShown.length ? '업그레이드나 /skills 화면처럼 대시보드 밖에서 바뀌었습니다.' : '기준값과 실제 설정이 같습니다.',
+      driftShown.length ? '<button class="link" data-drift="view">하나씩 보기</button><button class="link" data-drift="revert">모두 기준값대로</button><button class="link" data-drift="adopt">모두 지금 값 채택</button>' : ''),
+    card('onuse', '프로젝트 예외', `<span class="num">${excs.length}</span><span class="unit">개</span>`, `나만 ${excs.filter((l) => l === 'mine').length} · 팀 공유 ${excs.filter((l) => l === 'team').length}${st.teamDirty.size ? ` · <b style="color:var(--accent)">커밋 안 된 팀 파일 ${st.teamDirty.size}</b>` : ''}`),
+  ].join('');
+}
+
+// ----- agent view -----
+const FILTERS = [
+  ['all', '전체', () => true],
+  ['idle', '정리 후보', isIdle],
+  ['exc', '예외 있음', hasExc],
+  ['drift', '기준값과 다름', isDrift],
+  ['pending', '적용 대기', isPending],
+  ['locked', '잠김', (a, s) => a.readOnly || s.plugin || s.fm],
+];
+function visible(a) {
+  const f = FILTERS.find((x) => x[0] === st.filter)[2];
+  const q = st.q.trim().toLowerCase();
+  return a.skills.filter((s) => f(a, s) && (!q || `${nameOf(s)} ${s.src} ${s.sum} ${s.path ?? ''}`.toLowerCase().includes(q)));
+}
+function scopeOptions(a) {
+  const out = [['global', '전역 기본값 (모든 프로젝트)']];
+  for (const p of a.projects) for (const layer of a.layers) out.push([`${p}|${layer}`, `${p} · ${layer === 'mine' ? '나만 (이 PC)' : a.layers.length > 1 ? '팀 공유 (커밋)' : '프로젝트 파일'}`]);
+  return out;
+}
+function scopeDesc(a) {
+  const { p, layer } = parse(st.scope);
+  if (layer === 'global') return `모든 프로젝트에 적용됩니다 · <code>${esc(a.files.global)}</code>`;
+  if (layer === 'mine') return `이 PC의 ${esc(p)}에만 적용됩니다. 팀 공유 값보다 우선합니다 · <code>${esc(a.files.mine(p))}</code>`;
+  return `${a.layers.length > 1 ? '커밋하면 동료에게도 적용됩니다' : 'git에 올리면 팀과 공유됩니다'}${a.trial ? ' · Codex가 전역과 합치는지 시험 중' : ''} · <code>${esc(a.files.team(p))}</code>`;
+}
+function modeSeg(a, s) {
+  const scope = st.scope;
+  const { p } = parse(scope);
+  const locked = a.readOnly || s.plugin;
+  if (p && !applies(s, p)) return `<span class="na" style="justify-self:end;font-size:var(--fs-sm)" data-tip="${esc(`${p}에는 이 스킬이 없습니다`)}">이 프로젝트에 없음</span>`;
+  const val = cur(a, s, scope);
+  const shown = scope === 'global' ? (val ?? defaultOf(s)) : val ?? 'inherit';
+  const pending = st.staged.has(K(a, s, scope));
+  const drift = !pending && drifted(s, scope);
+  const opts = [...(scope === 'global' ? [] : ['inherit']), 'auto', 'manual', 'off'];
+  const before = pending ? (scope === 'global' ? (baseVal(s, scope) ?? defaultOf(s)) : baseVal(s, scope) ?? 'inherit') : null;
+  const label = (o) => (o === 'inherit' ? `따름 <span class="sub">${SHORT[inherited(a, s, scope)]}</span>` : `${dot(o)}${SHORT[o]}`);
+  const tip = [
+    drift ? `기준값: ${MODE[polVal(s, scope)] ?? '없음'} · 지금: ${MODE[actVal(s, scope)] ?? '자동'}${s.driftWhy ? `\n${s.driftWhy}` : ''}` : '',
+    pending ? `적용 대기: ${before === 'inherit' ? '따름' : MODE[before]} → ${shown === 'inherit' ? '따름' : MODE[shown]}` : '',
+    !managed(s, scope) && actVal(s, scope) !== undefined && !pending ? `기준값에 없는 값입니다 (관리 안 함)${s.note ? `\n${s.note}` : ''}` : '',
+  ].filter(Boolean).join('\n');
+  return `<div class="modeseg${pending ? ' pending' : ''}${drift ? ' drift' : ''}${locked ? ' locked' : ''}" role="radiogroup" aria-label="${esc(`${nameOf(s)} 호출 방식`)}" data-skill="${esc(s.id)}"${tip ? ` data-tip="${esc(tip)}"` : ''}>
+    ${locked ? `<span class="lock" data-tip="${esc(a.readOnly ? a.readOnlyWhy : '플러그인 스킬: 플러그인 단위로만 바꿀 수 있습니다')}">🔒</span>` : ''}
+    ${opts.map((o) => {
+      const why = whyNot(a, s, scope, o);
+      const checked = o === shown;
+      return `<button role="radio" aria-checked="${checked}" tabindex="${checked ? 0 : -1}" data-set="${o}" class="${o === 'inherit' ? 'inh' : ''}"${why ? ` aria-disabled="true" data-tip="${esc(why)}"` : ''}>${label(o)}</button>`;
+    }).join('')}</div>`;
+}
+function chips(a, s) {
+  if (a.readOnly) return '';
+  const list = exceptions(a, s).filter((e) => !(st.scope === e.scope)); // the edited scope is already the control
+  const out = list.map((e) => {
+    const drift = !e.staged && drifted(s, e.scope);
+    const unmanaged = e.layer === 'mine' && !managed(s, e.scope) && !e.staged;
+    const dirty = e.layer === 'team' && st.teamDirty.has(a.files.team(e.p));
+    const val = e.val === undefined ? `따름 (${SHORT[inherited(a, s, e.scope)]})` : SHORT[e.val];
+    const layerLabel = e.layer === 'mine' ? '나만' : a.layers.length > 1 ? '팀' : '프로젝트';
+    return `<button class="xchip ${e.layer === 'team' ? 'team' : ''}${e.staged ? ' pending' : ''}${drift ? ' drift' : ''}${unmanaged ? ' unmanaged' : ''}${dirty ? ' dirty' : ''}" data-exc="${esc(s.id)}" data-scope="${esc(e.scope)}" aria-haspopup="dialog"
+      data-tip="${esc([unmanaged ? `기준값에 없는 값 (관리 안 함)${s.note ? ` · ${s.note}` : ''}` : '', drift ? '기준값과 다름' : '', dirty ? '커밋 안 된 팀 파일' : ''].filter(Boolean).join('\n'))}">${dot(e.val ?? inherited(a, s, e.scope))}${esc(e.p)} ${val} <span class="layer">· ${layerLabel}</span></button>`;
+  });
+  return out.join('');
+}
+// "+ 예외" sits on the meta line, so rows without exceptions stay one block tall.
+const addExc = (a, s) => (!a.readOnly && !s.plugin && a.projects.some((p) => applies(s, p))
+  ? `<button class="xadd" data-exc="${esc(s.id)}" data-scope="" aria-haspopup="dialog" aria-label="${esc(nameOf(s))} 프로젝트 예외 추가">+ 프로젝트 예외</button>` : '');
+function flags(a, s) {
+  return [
+    isIdle(a, s) ? '<span class="flag">정리 후보</span>' : '',
+    isDrift(a, s) ? '<span class="flag">기준값과 다름</span>' : '',
+    s.dup ? '<span class="flag soft">중복 등록</span>' : '',
+    s.shared ? `<span class="flag soft" data-tip="${esc(`~/.agents/skills: ${SHARED_BY}가 함께 읽습니다`)}">공유 폴더</span>` : '',
+    s.fm ? '<span class="flag soft" data-tip="SKILL.md에 disable-model-invocation: true">SKILL.md 명시 전용</span>' : '',
+  ].join('');
+}
+function row(a, s, i) {
+  const eff = effective(a, s, parse(st.scope).p);
+  const t = eff === 'auto' ? s.tokens : 0;
+  const chipHtml = chips(a, s);
+  return `<div class="srow${st.selected.has(s.id) ? ' sel' : ''}" data-row="${esc(s.id)}">
+    <input type="checkbox" data-sel="${esc(s.id)}" data-i="${i}" ${st.selected.has(s.id) ? 'checked' : ''} aria-label="${esc(nameOf(s))} 선택" ${a.readOnly ? 'disabled' : ''}>
+    <div><div class="sk-name">${esc(nameOf(s))}${flags(a, s)}</div><div class="sk-sum">${esc(s.sum)}</div>
+      <div class="sk-meta"><span>${esc(s.src)}</span>${s.only ? `<span>프로젝트: ${esc(s.only.join(', '))}</span>` : ''}${a.key === 'path' && s.path ? `<span class="path">${esc(s.path)}</span>` : ''}<span>30일 ${s.uses}회</span>${addExc(a, s)}</div></div>
+    <div class="tok ${t ? 'always' : 'zero'}" data-tip="자동일 때 이 스킬 설명이 요청마다 차지하는 토큰">${t ? fmt(t) : '0'}<small>요청마다</small></div>
+    ${modeSeg(a, s)}
+    ${chipHtml ? `<div class="extras">${chipHtml}</div>` : ''}
+  </div>`;
+}
+function renderAgentPanel() {
+  const a = A();
+  const rows = visible(a);
+  if (!a.projects.includes(parse(st.scope).p) && st.scope !== 'global') st.scope = 'global';
+  const sel = [...st.selected].filter((id) => skillBy(a, id));
+  const head = `<div class="agent-head"><h2>${agentBadge(a)}</h2>${a.status ? `<span class="pill warn" data-tip="설정 파일은 로그인과 상관없이 바꿀 수 있습니다. 호출 기록은 로그인 뒤부터 쌓입니다.">${esc(a.status)}</span>` : ''}</div>
+    <div class="caps">${a.caps.map((c, i) => (i ? `<span>${esc(c)}</span>` : `<span>고를 수 있는 값: <b>${esc(c)}</b></span>`)).join('')}</div>`;
+  if (a.readOnly) {
+    $('mainpanel').innerHTML = `${head}<div class="notice ro">🔒 ${esc(a.readOnlyWhy)}</div>${groupsHtml(a, rows)}`;
+    return;
+  }
+  const opts = scopeOptions(a);
+  const scopebar = `<div class="scopebar"><label for="scope">편집 범위</label><select id="scope">${opts.map(([v2, l]) => `<option value="${esc(v2)}"${v2 === st.scope ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select><div class="scope-desc">${scopeDesc(a)}</div></div>`;
+  const drift = a.skills.filter((s) => isDrift(a, s));
+  const driftPending = drift.every((s) => isPending(a, s));
+  const notices = [
+    drift.length && !driftPending ? `<div class="notice warn"><span><b>기준값과 다른 설정 ${drift.length}개</b> · 대시보드 밖에서 바뀌었습니다.</span><span class="acts"><button class="btn" data-drift="view">하나씩 보기</button><button class="btn" data-drift="revert">모두 기준값대로</button><button class="btn" data-drift="adopt">모두 지금 값 채택</button></span></div>` : '',
+    st.teamDirty.size ? `<div class="notice team"><span><b>팀 공유 파일 ${st.teamDirty.size}개</b>가 바뀌었습니다. 커밋해야 동료에게 전달됩니다: ${[...st.teamDirty].map((f) => `<code>${esc(f)}</code>`).join(' ')}</span><span class="acts"><button class="btn" id="copy-git">git 명령 복사</button></span></div>` : '',
+  ].join('');
+  const recs = recsHtml(a);
+  const toolbar = sel.length
+    ? `<div class="selbar" role="region" aria-label="선택한 스킬 일괄 변경"><span><b>${sel.length}개 선택</b> <span class="scope-note">· 범위: ${esc(opts.find((o) => o[0] === st.scope)[1])}</span></span>
+        <span class="btns">${[...(st.scope === 'global' ? [] : ['inherit']), 'auto', 'manual', 'off'].map((m) => `<button class="btn" data-bulk="${m}" ${m !== 'inherit' && !a.modes.includes(m) ? `disabled data-tip="${esc(a.why?.[m] ?? '')}"` : ''}>${m === 'inherit' ? '따름' : `${dot(m)}${SHORT[m]}`}</button>`).join('')}
+        <button class="btn" data-clear-sel>선택 해제</button></span></div>`
+    : `<div class="toolbar"><label class="search"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><input type="search" id="q" value="${esc(st.q)}" placeholder="스킬 이름, 하는 일, 출처로 찾기" aria-label="스킬 찾기"></label>
+        <div class="seg-ctl" role="group" aria-label="보기 필터">${FILTERS.map(([id, l, f]) => `<button data-filter="${id}" aria-pressed="${st.filter === id}">${l}<span class="n">${a.skills.filter((s) => f(a, s)).length}</span></button>`).join('')}</div>
+        <span class="count">${rows.length}개 표시 · 전체 ${a.skills.length}개</span></div>`;
+  $('mainpanel').innerHTML = `${head}${scopebar}${notices}${recs}${toolbar}${st.loading ? '<div class="skel"></div><div class="skel"></div><div class="skel"></div><div class="skel"></div>' : groupsHtml(a, rows)}`;
+}
+function groupsHtml(a, rows) {
+  if (!rows.length) return `<div class="empty-state"><b>조건에 맞는 스킬이 없습니다</b><span>필터를 "전체"로 바꾸거나 찾는 말을 지워 보세요.</span><button class="btn" data-filter="all">필터 초기화</button></div>`;
+  const byCat = new Map();
+  rows.forEach((s) => byCat.set(s.cat, [...(byCat.get(s.cat) ?? []), s]));
+  let i = 0;
+  return CATS.filter(([id]) => byCat.has(id)).map(([id, label, hint]) => {
+    const list = byCat.get(id);
+    const allSel = list.every((s) => st.selected.has(s.id));
+    const tok = list.filter((s) => !s.only).reduce((t, s) => t + (effective(a, s, null) === 'auto' ? s.tokens : 0), 0);
+    const html = `<details class="group" open><summary>
+      <svg class="caret" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ${a.readOnly ? '' : `<input type="checkbox" class="gsel" data-gsel="${id}" ${allSel ? 'checked' : ''} aria-label="${esc(label)} 묶음 전체 선택">`}
+      <h3>${esc(label)}</h3><span class="hint">${esc(hint)}</span>
+      <span class="facts"><span><b>${list.length}</b>개</span><span>요청마다 <b>${fmt(tok)}</b></span></span></summary>
+      <div class="rows">${list.map((s) => row(a, s, i++)).join('')}</div></details>`;
+    return html;
+  }).join('');
+}
+function recsHtml(a) {
+  const chips = [];
+  const to = a.modes.includes('manual') ? 'manual' : 'off';
+  const idle = a.skills.filter((s) => isIdle(a, s) && !st.staged.has(K(a, s, 'global')));
+  if (idle.length) chips.push(`<button class="rec" data-rec="idle">정리 후보 ${idle.length}개를 ${SHORT[to]}으로 <span class="tok">−${fmt(idle.filter((s) => !s.only).reduce((t, s) => t + s.tokens, 0))}</span></button>`);
+  const extra = a.skills.filter((s) => s.extra && effective(a, s, null) !== 'off');
+  if (extra.length) chips.push(`<button class="rec" data-rec="dup">중복 사본 ${extra.length}개 끄기 <span class="tok">−${fmt(extra.reduce((t, s) => t + s.tokens, 0))}</span></button>`);
+  return chips.length ? `<div class="recs"><span>추천</span>${chips.join('')}</div>` : '';
+}
+
+// ----- cross-agent view -----
+function crossRows() {
+  const names = new Map();
+  for (const a of AGENTS) for (const s of a.skills) {
+    const n = nameOf(s);
+    if (!names.has(n)) names.set(n, { name: n, cat: s.cat, sum: s.sum, shared: false, per: {} });
+    const r = names.get(n);
+    r.shared ||= !!s.shared;
+    (r.per[a.id] ??= []).push(s);
+  }
+  const q = st.q.trim().toLowerCase();
+  return [...names.values()].filter((r) => (!q || r.name.toLowerCase().includes(q)) && (st.filter !== 'multi' || Object.keys(r.per).length > 1) && (st.filter !== 'shared' || r.shared))
+    .sort((x, y) => Object.keys(y.per).length - Object.keys(x.per).length || x.name.localeCompare(y.name));
+}
+function crossCell(a, r) {
+  const copies = r.per[a.id];
+  if (!copies) return '<span class="na" data-tip="이 에이전트에 없는 스킬">—</span>';
+  const s = copies[0];
+  const eff = effective(a, s, null);
+  const pending = copies.some((c) => st.staged.has(K(a, c, 'global')));
+  const drift = copies.some((c) => drifted(c, 'global'));
+  const locked = a.readOnly || s.plugin;
+  return `<button class="xcell${pending ? ' pending' : ''}${drift ? ' drift' : ''}${locked ? ' locked' : ''}" data-xagent="${a.id}" data-xname="${esc(r.name)}" aria-haspopup="dialog"
+    aria-label="${esc(`${r.name}, ${a.label}: ${MODE[eff]}`)}"${locked ? ` data-tip="${esc(a.readOnly ? 'Kimi Code는 설정으로 바꿀 수 없습니다' : '플러그인 스킬')}"` : ''}>${locked ? '🔒 ' : ''}${dot(eff)}${SHORT[eff]}${copies.length > 1 ? `<span class="copies">×${copies.length}</span>` : ''}</button>`;
+}
+function renderCrossPanel() {
+  const rows = crossRows();
+  const sel = [...st.selected].filter((n) => rows.some((r) => r.name === n));
+  const cols = AGENTS;
+  const toolbar = sel.length
+    ? `<div class="selbar" role="region" aria-label="선택한 스킬을 모든 에이전트에서 변경"><span><b>${sel.length}개 선택</b> <span class="scope-note">· 모든 에이전트의 전역 기본값</span></span>
+        <span class="btns">${['auto', 'manual', 'off'].map((m) => `<button class="btn" data-xbulk="${m}">${dot(m)}${SHORT[m]}</button>`).join('')}<button class="btn" data-clear-sel>선택 해제</button></span>
+        <span class="fallback" role="radiogroup" aria-label="명시 전용을 못 하는 에이전트">명시 전용을 못 하는 에이전트(Codex · Qwen Code · ZCode)는
+          <label><input type="radio" name="fb" value="skip" ${st.fallback === 'skip' ? 'checked' : ''}> 건너뜀</label>
+          <label><input type="radio" name="fb" value="off" ${st.fallback === 'off' ? 'checked' : ''}> 꺼짐으로</label></span></div>`
+    : `<div class="toolbar"><label class="search"><svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><input type="search" id="q" value="${esc(st.q)}" placeholder="스킬 이름으로 찾기" aria-label="스킬 찾기"></label>
+        <div class="seg-ctl" role="group" aria-label="보기 필터">${[['all', '전체'], ['multi', '여러 에이전트에 있음'], ['shared', '공유 폴더']].map(([id, l]) => `<button data-filter="${id}" aria-pressed="${st.filter === id}">${l}</button>`).join('')}</div>
+        <span class="count">${rows.length}개 스킬</span></div>`;
+  const allSel = rows.length && rows.every((r) => st.selected.has(r.name));
+  $('mainpanel').innerHTML = `<div class="agent-head"><h2>스킬별 · 모든 에이전트</h2></div>
+    <p class="lead" style="margin:6px 0 4px">한 스킬을 모든 에이전트에서 한 번에 바꿉니다. 칸은 각 에이전트의 전역 기본값입니다. 칸을 누르면 그 에이전트만, 스킬을 골라 위 막대를 쓰면 모든 에이전트가 바뀝니다. 프로젝트 예외는 에이전트별 보기에서 다룹니다.</p>
+    ${toolbar}
+    ${rows.length ? `<div class="xtable-wrap"><table class="xt"><thead><tr><th class="first"><input type="checkbox" class="gsel" id="xsel-all" ${allSel ? 'checked' : ''} aria-label="보이는 스킬 전체 선택"> 스킬</th>${cols.map((a) => `<th>${agentBadge(a)}${a.status ? `<br><span class="pill">${esc(a.status)}</span>` : ''}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map((r) => `<tr class="${st.selected.has(r.name) ? 'sel' : ''}"><td class="first"><div style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" class="gsel" data-xsel="${esc(r.name)}" ${st.selected.has(r.name) ? 'checked' : ''} aria-label="${esc(r.name)} 선택" style="margin-top:4px">
+        <div><div class="sk-name">${esc(r.name)}${r.shared ? `<span class="flag soft" data-tip="${esc(`~/.agents/skills: ${SHARED_BY}`)}">공유 폴더</span>` : ''}</div><div class="sk-sum">${esc(r.sum)}</div></div></div></td>
+        ${cols.map((a) => `<td>${crossCell(a, r)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`
+      : `<div class="empty-state"><b>조건에 맞는 스킬이 없습니다</b><button class="btn" data-filter="all">필터 초기화</button></div>`}`;
+}
+
+// ----- change list -----
+function describe(c, s, scope, a) {
+  const before = scope === 'global' ? (baseVal(s, scope) ?? defaultOf(s)) : baseVal(s, scope);
+  const after = c.kind === 'adopt' ? (actVal(s, scope) ?? (scope === 'global' ? 'auto' : undefined)) : c.value === 'inherit' ? undefined : c.value;
+  const lab = (x) => (x === undefined ? '따름' : SHORT[x]);
+  if (c.kind === 'revert') return `기준값대로 되돌리기 · 지금 ${lab(actVal(s, scope) ?? (scope === 'global' ? 'auto' : undefined))} → ${lab(polVal(s, scope))}`;
+  if (c.kind === 'adopt') return `지금 값 채택 · 기준값 ${lab(polVal(s, scope))} → ${lab(after)}`;
+  return `${before === undefined ? '따름' : dot(before) + lab(before)} → ${after === undefined ? '따름' : dot(after) + lab(after)}`;
+}
+function scopeLabel(a, scope) {
+  const { p, layer } = parse(scope);
+  return layer === 'global' ? '전역 기본값' : `${p} · ${layer === 'mine' ? '나만' : a.layers.length > 1 ? '팀 공유' : '프로젝트 파일'}`;
+}
+function renderCart() {
+  const byAgent = new Map();
+  for (const [k, c] of st.staged) {
+    const [aid, sid, ...rest] = k.split('|');
+    const scope = rest.join('|');
+    const a = agentBy(aid), s = skillBy(a, sid);
+    byAgent.set(aid, [...(byAgent.get(aid) ?? []), { k, c, a, s, scope }]);
+  }
+  const n = st.staged.size;
+  const deltas = AGENTS.filter((a) => byAgent.has(a.id)).map((a) => {
+    const now = tokensFor(a, null, false), next = tokensFor(a, null, true);
+    return `<div>${agentBadge(a)}<span class="v">${now === next ? fmt(now) : `<s>${fmt(now)}</s> → <span class="${next < now ? 'down' : 'up'}">${fmt(next)}</span>`}</span></div>`;
+  }).join('');
+  const team = new Set([...st.staged.entries()].flatMap(([k, c]) => targets(k, c).filter((t) => t.role === 'team').map((t) => t.file)));
+  $('cart').innerHTML = `<h2>변경 목록 ${n ? `<span class="n">${n}</span>` : ''}</h2>
+    ${n ? `<div class="tokdelta" aria-label="요청마다 토큰 변화"><div style="color:var(--muted);font-size:var(--fs-xs);font-weight:700">요청마다 토큰 (모든 프로젝트 공통)</div>${deltas}</div>
+      ${[...byAgent.entries()].map(([aid, items]) => `<div class="cgroup"><b>${agentBadge(agentBy(aid))}</b>${items.map(({ k, c, a, s, scope }) => `<div class="citem"><span class="what">${esc(nameOf(s))}</span><span class="where">${esc(scopeLabel(a, scope))}</span><span class="chg">${describe(c, s, scope, a)}</span><button class="x" data-unstage="${esc(k)}" aria-label="${esc(`${nameOf(s)} 변경 취소`)}">×</button></div>`).join('')}</div>`).join('')}
+      ${team.size ? `<p class="cart-foot">팀 공유 파일 ${team.size}개가 바뀝니다. 적용 뒤 커밋해야 동료에게 전달됩니다.</p>` : ''}
+      <div class="cart-actions"><button class="btn" id="discard">모두 취소</button><button class="btn primary" id="preview">미리보기 후 적용</button></div>`
+    : `<p class="empty">바꾼 값이 여기에 모입니다. 적용하기 전까지는 어떤 파일도 바뀌지 않습니다.</p><p class="cart-foot">자동은 요청마다 설명 토큰이 들고, /명시 전용은 이름으로 부를 때만, 꺼짐은 아예 숨깁니다.</p>`}`;
+  $('cart').classList.toggle('open', st.cartOpen);
+  const now = AGENTS.reduce((t, a) => t + tokensFor(a, null, false), 0), next = AGENTS.reduce((t, a) => t + tokensFor(a, null, true), 0);
+  $('dock').innerHTML = n ? `<span class="sum">변경 <b>${n}</b>건 · 요청마다 <b>${next < now ? '−' : '+'}${fmt(Math.abs(now - next))}</b></span><button class="btn" id="cart-toggle" aria-expanded="${st.cartOpen}">${st.cartOpen ? '목록 닫기' : '목록 보기'}</button><button class="btn primary" id="preview2">적용</button>`
+    : '<span class="sum" style="color:var(--muted)">바꾼 값이 여기에 모입니다</span>';
+}
+
+// ============ files that change ============
+function targets(k, c) {
+  const [aid, sid, ...rest] = k.split('|');
+  const scope = rest.join('|');
+  const a = agentBy(aid), s = skillBy(a, sid);
+  const { p, layer } = parse(scope);
+  const key = a.key === 'path' && s.path ? `path:${s.path}` : nameOf(s);
+  const out = [];
+  const after = c.kind === 'adopt' ? (actVal(s, scope) ?? (layer === 'global' ? 'auto' : undefined)) : c.kind === 'revert' ? polVal(s, scope) : c.value === 'inherit' ? undefined : c.value;
+  const show = (x, g) => (x === undefined ? (g ? '(없음 = 자동)' : '(없음 = 따름)') : x);
+  if (layer !== 'team' && c.kind !== 'revert') {
+    const pb = polVal(s, scope);
+    if (pb !== after) out.push({ file: a.files.policy, role: 'policy', line: `modes.${a.id}.${layer === 'global' ? 'global' : `projects["${p}"]`}["${key}"]`, from: show(pb, layer === 'global'), to: after === undefined ? '(삭제)' : after });
+  }
+  if (c.kind !== 'adopt') {
+    const file = layer === 'global' ? a.files.global : a.files[layer](p);
+    const ab = actVal(s, scope);
+    const same = layer === 'global' ? (ab ?? 'auto') === (after ?? 'auto') : ab === after;
+    if (!same) {
+      const repr = (x) => {
+        if (a.id === 'claude' || a.id === 'codebuddy') return x === undefined || (layer === 'global' && x === 'auto') ? '(키 삭제)' : `"${{ auto: 'on', manual: 'user-invocable-only', off: 'off' }[x]}"`;
+        if (a.id === 'codex') return x === 'off' ? 'enabled = false' : '(블록 삭제)';
+        if (a.id === 'zcode') return x === 'off' ? '{ "enable": false }' : x === 'auto' && layer !== 'global' ? '{ "enable": true }' : '(키 삭제)';
+        if (a.id === 'qwen') return x === 'off' ? 'skills.defaultDisabled에 추가' : x === 'auto' && layer !== 'global' ? 'skills.enabled에 추가' : '(목록에서 빼기)';
+        return String(x);
+      };
+      const field = a.id === 'codex' ? `[[skills.config]] path = "${s.path}"` : a.id === 'zcode' ? `skillOverrides["${s.path}"]` : a.id === 'qwen' ? `"${nameOf(s)}"` : `skillOverrides["${nameOf(s)}"]`;
+      out.push({ file, role: layer === 'team' ? 'team' : 'mine', line: field, from: repr(ab), to: repr(after) });
+    }
+  }
+  return out;
+}
+function openPreview() {
+  if (!st.staged.size) return;
+  const groups = new Map();
+  for (const [k, c] of st.staged) for (const t of targets(k, c)) groups.set(t.file, [...(groups.get(t.file) ?? []), t]);
+  const order = { policy: 0, mine: 1, team: 2 };
+  const roleLabel = { policy: '기준값', mine: '내 설정', team: '팀 공유 · 커밋 필요' };
+  $('dlg-sub').textContent = `변경 ${st.staged.size}건 · 파일 ${groups.size}개. 기준값과 에이전트 설정을 함께 바꿔서 둘이 어긋나지 않습니다.`;
+  $('dlg-body').innerHTML = [...groups.entries()].sort((x, y) => order[x[1][0].role] - order[y[1][0].role]).map(([file, lines]) => `<section class="file">
+    <h3><span class="role ${lines[0].role}">${roleLabel[lines[0].role]}</span><code>${esc(file)}</code><span class="pill">${lines.length}건</span></h3>
+    <ul>${lines.map((l) => `<li><span>${esc(l.line)}</span><span class="from">${esc(l.from)}</span>→<span class="to">${esc(l.to)}</span></li>`).join('')}</ul></section>`).join('');
+  $('dlg-apply').disabled = false;
+  $('dlg-apply').textContent = '적용';
+  $('dlg').showModal();
+  $('dlg-apply').focus();
+}
+// ZCode's config is locked while its app runs: the first apply that touches it fails, so the failure path is testable.
+function applyStaged() {
+  const btn = $('dlg-apply');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>적용 중…';
+  $('dlg-body').querySelector('.err')?.remove();
+  setTimeout(() => {
+    const touchesZ = [...st.staged.keys()].some((k) => k.startsWith('zcode|'));
+    if (touchesZ && st.failOnce) {
+      st.failOnce = false;
+      $('dlg-body').insertAdjacentHTML('afterbegin', `<div class="err" role="alert"><b>~/.zcode/cli/config.json을 쓰지 못했습니다.</b><span>ZCode 앱이 실행 중이라 파일이 잠겨 있습니다. 다른 파일도 모두 원래대로 되돌렸습니다. ZCode를 닫고 다시 시도하세요.</span></div>`);
+      btn.disabled = false;
+      btn.textContent = '다시 시도';
+      btn.focus();
+      return;
+    }
+    st.undo = JSON.stringify(AGENTS.map((a) => a.skills.map((s) => ({ policy: s.policy, actual: s.actual }))));
+    const n = st.staged.size;
+    const team = new Set();
+    for (const [k, c] of st.staged) {
+      for (const t of targets(k, c)) if (t.role === 'team') team.add(t.file);
+      const [aid, sid, ...rest] = k.split('|');
+      const scope = rest.join('|');
+      const a = agentBy(aid), s = skillBy(a, sid);
+      const { p, layer } = parse(scope);
+      const val = c.kind === 'adopt' ? (actVal(s, scope) ?? (layer === 'global' ? 'auto' : undefined)) : c.kind === 'revert' ? polVal(s, scope) : c.value === 'inherit' ? undefined : c.value;
+      const put = (obj, x) => { if (layer === 'global') obj.global = x; else if (x === undefined) delete obj[layer][p]; else obj[layer][p] = x; };
+      if (layer !== 'team' && c.kind !== 'revert') put(s.policy, val);
+      if (c.kind !== 'adopt') put(s.actual, layer === 'global' && val === 'auto' ? undefined : val);
+    }
+    team.forEach((f) => st.teamDirty.add(f));
+    st.staged.clear();
+    st.selected.clear();
+    $('dlg').close();
+    render();
+    toast(`${n}건 적용했습니다 · 새 세션부터 반영${team.size ? ` · 팀 파일 ${team.size}개 커밋 필요` : ''}`, true);
+  }, 700);
+}
+function undo() {
+  if (!st.undo) return;
+  const snap = JSON.parse(st.undo);
+  AGENTS.forEach((a, i) => a.skills.forEach((s, j) => Object.assign(s, snap[i][j])));
+  st.undo = null;
+  st.teamDirty.clear();
+  render();
+  toast('마지막 적용을 되돌렸습니다');
+}
+let toastTimer;
+function toast(msg, withUndo) {
+  const t = $('toast');
+  t.innerHTML = `<span>${esc(msg)}</span>${withUndo ? '<button id="undo">되돌리기</button>' : ''}`;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 6500);
+}
+
+// ============ exception popover (per project and layer) ============
+const pop = $('pop');
+let popAnchor = null;
+function openExc(anchor, sid, scope) {
+  const a = A(), s = skillBy(a, sid);
+  const projects = a.projects.filter((p) => applies(s, p));
+  const pre = scope ? parse(scope) : { p: projects.find((p) => !exceptions(a, s).some((e) => e.p === p)) ?? projects[0], layer: a.layers[0] };
+  popAnchor = anchor;
+  pop.dataset.skill = sid;
+  const draw = (p, layer) => {
+    const sc = `${p}|${layer}`;
+    const val = cur(a, s, sc);
+    const inh = inherited(a, s, sc);
+    const mineOver = layer === 'team' && a.layers.includes('mine') && cur(a, s, `${p}|mine`) !== undefined;
+    pop.innerHTML = `<h4><span class="mono">${esc(nameOf(s))}</span> 프로젝트 예외</h4>
+      <label class="field"><span>프로젝트</span><select id="pp">${projects.map((x) => `<option${x === p ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
+      ${a.layers.length > 1 ? `<div class="field"><span>어디에 둘까요</span><div class="layers" role="radiogroup">
+        <label><input type="radio" name="pl" value="mine" ${layer === 'mine' ? 'checked' : ''}>나만<small>이 PC · settings.local.json</small></label>
+        <label><input type="radio" name="pl" value="team" ${layer === 'team' ? 'checked' : ''}>팀 공유<small>커밋 · settings.json</small></label></div></div>`
+        : `<div class="field"><span>저장 위치</span><span style="font-size:var(--fs-xs);color:var(--muted)">${esc(a.files.team(p))} · git에 올리면 팀과 공유</span></div>`}
+      <div class="opts" role="radiogroup" aria-label="값">${['inherit', 'auto', 'manual', 'off'].map((o) => {
+        const why = whyNot(a, s, sc, o);
+        return `<button class="opt" role="radio" aria-checked="${(val ?? 'inherit') === o}" data-v="${o}" ${why ? 'disabled' : ''}>${o === 'inherit' ? '<span></span>' : dot(o)}<span>${o === 'inherit' ? `따름 <span class="hint">(${SHORT[inh]})</span>` : MODE[o]}</span>${why ? `<span class="why">${esc(why)}</span>` : ''}</button>`;
+      }).join('')}</div>
+      ${mineOver ? `<p class="note">이 PC에는 "나만" 값(${SHORT[cur(a, s, `${p}|mine`)]})이 있어서, 팀 값을 바꿔도 여기서는 나만 값이 이깁니다.</p>` : ''}
+      ${layer === 'team' ? '<p class="note">팀 공유 값은 기준값(policy.json)이 아니라 저장소 파일에 바로 씁니다. 적용 뒤 커밋해야 동료에게 갑니다.</p>' : ''}
+      <div class="foot"><button class="link" data-close>닫기</button>${val !== undefined ? '<button class="link" data-v="inherit" style="color:var(--warn)">예외 지우기</button>' : ''}</div>`;
+    pop.querySelector('#pp').addEventListener('change', (e) => draw(e.target.value, layer));
+    for (const r of pop.querySelectorAll('input[name="pl"]')) r.addEventListener('change', (e) => draw(p, e.target.value));
+    pop.dataset.scope = sc;
+  };
+  draw(pre.p, pre.layer);
+  place(anchor);
+  (pop.querySelector('.opt[aria-checked="true"]:not(:disabled)') ?? pop.querySelector('.opt:not(:disabled)'))?.focus();
+}
+function openCross(anchor, aid, name) {
+  const a = agentBy(aid);
+  const copies = a.skills.filter((s) => nameOf(s) === name);
+  const s = copies[0];
+  popAnchor = anchor;
+  pop.dataset.xagent = aid;
+  pop.dataset.xname = name;
+  const val = cur(a, s, 'global') ?? defaultOf(s);
+  pop.innerHTML = `<h4>${agentBadge(a)} <span class="mono">${esc(name)}</span></h4>
+    ${copies.length > 1 ? `<p class="note" style="border:0;padding:0">사본 ${copies.length}개를 모두 바꿉니다. 하나만 바꾸려면 에이전트별 보기에서 고르세요.</p>` : ''}
+    <div class="opts" role="radiogroup" aria-label="전역 기본값">${['auto', 'manual', 'off'].map((o) => {
+      const why = whyNot(a, s, 'global', o);
+      return `<button class="opt" role="radio" aria-checked="${val === o}" data-xv="${o}" ${why ? 'disabled' : ''}>${dot(o)}<span>${MODE[o]}</span>${why ? `<span class="why">${esc(why)}</span>` : ''}</button>`;
+    }).join('')}</div>
+    <div class="foot"><button class="link" data-close>닫기</button><button class="link" data-goto="${aid}">에이전트별 보기로 →</button></div>`;
+  place(anchor);
+  (pop.querySelector('.opt[aria-checked="true"]:not(:disabled)') ?? pop.querySelector('.opt:not(:disabled)'))?.focus();
+}
+function place(anchor) {
+  pop.hidden = false;
+  const r = anchor.getBoundingClientRect(), b = pop.getBoundingClientRect();
+  let top = r.bottom + 6;
+  if (top + b.height > innerHeight - 8) top = Math.max(8, r.top - b.height - 6);
+  pop.style.top = `${top}px`;
+  pop.style.left = `${Math.min(Math.max(8, r.left), innerWidth - b.width - 8)}px`;
+}
+function closePop(refocus = true) {
+  if (pop.hidden) return;
+  pop.hidden = true;
+  delete pop.dataset.xagent;
+  const a = popAnchor;
+  popAnchor = null;
+  if (refocus && a?.isConnected) a.focus();
+}
+
+// ============ events ============
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  if (t.closest('#pop')) {
+    if (t.closest('[data-close]')) return closePop();
+    const g = t.closest('[data-goto]');
+    if (g) { st.view = 'agent'; st.agent = g.dataset.goto; st.selected.clear(); closePop(false); return render(); }
+    const xv = t.closest('[data-xv]');
+    if (xv) {
+      const a = agentBy(pop.dataset.xagent);
+      for (const s of a.skills.filter((x) => nameOf(x) === pop.dataset.xname)) trySet(a, s, 'global', xv.dataset.xv);
+      const anchorSel = `[data-xagent="${a.id}"][data-xname="${CSS.escape(pop.dataset.xname)}"]`;
+      closePop(false); render(); document.querySelector(anchorSel)?.focus(); return;
+    }
+    const ov = t.closest('.opt[data-v], .foot [data-v]');
+    if (ov && !ov.disabled) {
+      const a = A(), s = skillBy(a, pop.dataset.skill);
+      trySet(a, s, pop.dataset.scope, ov.dataset.v);
+      closePop(false); render();
+      document.querySelector(`[data-row="${CSS.escape(s.id)}"] .xadd, [data-row="${CSS.escape(s.id)}"] .xchip`)?.focus();
+      return;
+    }
+    return;
+  }
+  if (!t.closest('#pop') && !pop.hidden) closePop(false);
+  const soon = t.closest('[data-soon]');
+  if (soon) { e.preventDefault(); return toast(`${soon.dataset.soon}은 지금 대시보드의 페이지입니다. 시안에서는 호출 방식 페이지만 만들었습니다.`); }
+  const view = t.closest('[data-view]');
+  if (view) { st.view = view.dataset.view; st.filter = 'all'; st.selected.clear(); st.q = ''; return render(); }
+  const ag = t.closest('[data-agent]');
+  if (ag) { st.agent = ag.dataset.agent; st.scope = 'global'; st.filter = 'all'; st.selected.clear(); return render(); }
+  const f = t.closest('[data-filter]');
+  if (f) { st.filter = f.dataset.filter; if (f.closest('.empty-state')) st.q = ''; return render(); }
+  const seg = t.closest('.modeseg [data-set]');
+  if (seg) {
+    if (seg.getAttribute('aria-disabled') === 'true') return toast(seg.dataset.tip || '고를 수 없는 값입니다');
+    const a = A(), s = skillBy(a, seg.closest('.modeseg').dataset.skill);
+    trySet(a, s, st.scope, seg.dataset.set); render();
+    document.querySelector(`[data-row="${CSS.escape(s.id)}"] .modeseg [aria-checked="true"]`)?.focus();
+    return;
+  }
+  const exc = t.closest('[data-exc]');
+  if (exc) { e.stopPropagation(); return openExc(exc, exc.dataset.exc, exc.dataset.scope); }
+  const xc = t.closest('[data-xagent]');
+  if (xc && !xc.closest('#pop')) { if (xc.classList.contains('locked')) return toast(xc.dataset.tip); return openCross(xc, xc.dataset.xagent, xc.dataset.xname); }
+  const rec = t.closest('[data-rec]');
+  if (rec) {
+    const a = A(); let n = 0;
+    const to = a.modes.includes('manual') ? 'manual' : 'off';
+    for (const s of a.skills) if ((rec.dataset.rec === 'idle' ? isIdle(a, s) : s.extra) && trySet(a, s, 'global', rec.dataset.rec === 'idle' ? to : 'off')) n++;
+    st.filter = 'pending'; render(); return toast(`${n}건을 변경 목록에 넣었습니다`);
+  }
+  const dr = t.closest('[data-drift]');
+  if (dr) {
+    const list = st.view === 'agent' ? [A()] : AGENTS;
+    if (dr.dataset.drift === 'view') { if (st.view !== 'agent') { st.view = 'agent'; st.agent = AGENTS.find((a) => a.skills.some((s) => isDrift(a, s)))?.id ?? st.agent; } st.filter = 'drift'; return render(); }
+    for (const a of list) for (const s of a.skills) for (const sc of ['global', ...a.projects.map((p) => `${p}|mine`)]) if (drifted(s, sc)) stage(a, s, sc, { kind: dr.dataset.drift });
+    return render();
+  }
+  const bulk = t.closest('[data-bulk]');
+  if (bulk) {
+    const a = A(); let n = 0, skip = 0;
+    for (const id of st.selected) { const s = skillBy(a, id); if (!s) continue; if (trySet(a, s, st.scope, bulk.dataset.bulk)) n++; else skip++; }
+    st.selected.clear(); render(); return toast(`${n}건을 변경 목록에 넣었습니다${skip ? ` · 바꿀 수 없는 ${skip}개는 건너뜀` : ''}`);
+  }
+  const xb = t.closest('[data-xbulk]');
+  if (xb) {
+    let n = 0, skip = 0, fell = 0;
+    for (const name of st.selected) for (const a of AGENTS) for (const s of a.skills.filter((x) => nameOf(x) === name)) {
+      let m = xb.dataset.xbulk;
+      if (m === 'manual' && !a.readOnly && !a.modes.includes('manual')) { if (st.fallback === 'off') { m = 'off'; fell++; } else { skip++; continue; } }
+      if (trySet(a, s, 'global', m)) n++; else skip++;
+    }
+    st.selected.clear(); render();
+    return toast(`${n}건을 변경 목록에 넣었습니다${fell ? ` · ${fell}건은 꺼짐으로` : ''}${skip ? ` · ${skip}건은 건너뜀` : ''}`);
+  }
+  if (t.closest('[data-clear-sel]')) { st.selected.clear(); return render(); }
+  const un = t.closest('[data-unstage]');
+  if (un) { st.staged.delete(un.dataset.unstage); render(); return $('cart').querySelector('.x, #discard, h2')?.focus?.(); }
+  if (t.id === 'discard') { st.staged.clear(); st.cartOpen = false; return render(); }
+  if (t.id === 'preview' || t.id === 'preview2') return openPreview();
+  if (t.id === 'cart-toggle') { st.cartOpen = !st.cartOpen; return renderCart(); }
+  if (t.id === 'dlg-cancel') return $('dlg').close();
+  if (t.id === 'dlg-apply') return applyStaged();
+  if (t.id === 'undo') { $('toast').hidden = true; return undo(); }
+  if (t.id === 'copy-git') {
+    const files = [...st.teamDirty];
+    const cmd = `git add ${files.join(' ')} && git commit -m "chore: 스킬 호출 방식 팀 설정"`;
+    navigator.clipboard?.writeText(cmd).then(() => toast('git 명령을 복사했습니다'), () => toast(cmd));
+    return;
+  }
+});
+let shiftHeld = false;
+document.addEventListener('pointerdown', (e) => { shiftHeld = e.shiftKey; }, true);
+document.addEventListener('keydown', (e) => { if (e.key === ' ') shiftHeld = e.shiftKey; }, true);
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.id === 'scope') { st.scope = t.value; return render(); }
+  if (t.name === 'fb') { st.fallback = t.value; return; }
+  if (t.dataset.sel) {
+    const a = A(), rows = visible(a), i = Number(t.dataset.i);
+    if (shiftHeld && st.lastIdx !== null) for (let j = Math.min(i, st.lastIdx); j <= Math.max(i, st.lastIdx); j++) t.checked ? st.selected.add(rows[j].id) : st.selected.delete(rows[j].id);
+    else t.checked ? st.selected.add(t.dataset.sel) : st.selected.delete(t.dataset.sel);
+    st.lastIdx = i; render();
+    return document.querySelector(`[data-sel="${CSS.escape(t.dataset.sel)}"]`)?.focus();
+  }
+  if (t.dataset.gsel) { for (const s of A().skills.filter((x) => x.cat === t.dataset.gsel && visible(A()).includes(x))) t.checked ? st.selected.add(s.id) : st.selected.delete(s.id); return render(); }
+  if (t.dataset.xsel) { t.checked ? st.selected.add(t.dataset.xsel) : st.selected.delete(t.dataset.xsel); render(); return document.querySelector(`[data-xsel="${CSS.escape(t.dataset.xsel)}"]`)?.focus(); }
+  if (t.id === 'xsel-all') { for (const r of crossRows()) t.checked ? st.selected.add(r.name) : st.selected.delete(r.name); return render(); }
+});
+// The group checkbox sits inside <summary>; keep it from toggling the group open/closed.
+document.addEventListener('click', (e) => { if (e.target.matches('summary .gsel')) e.stopPropagation(); }, true);
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'q') return;
+  st.q = e.target.value;
+  const pos = e.target.selectionStart;
+  render();
+  const q = $('q'); if (q) { q.focus(); q.setSelectionRange(pos, pos); }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !pop.hidden) { e.preventDefault(); return closePop(); }
+  // Radio-group arrows inside a mode control: move and choose, like native radios.
+  const seg = e.target.closest?.('.modeseg');
+  if (seg && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+    e.preventDefault();
+    const btns = [...seg.querySelectorAll('[data-set]:not([aria-disabled="true"])')];
+    const i = btns.indexOf(document.activeElement);
+    const next = btns[(i + (e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1) + btns.length) % btns.length];
+    next?.click();
+    return;
+  }
+  if (!pop.hidden && pop.contains(e.target) && ['ArrowDown', 'ArrowUp'].includes(e.key)) {
+    e.preventDefault();
+    const opts = [...pop.querySelectorAll('.opt:not(:disabled)')];
+    const i = opts.indexOf(document.activeElement);
+    opts[(i + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length]?.focus();
+  }
+});
+$('dlg').addEventListener('close', () => $('preview')?.focus() ?? $('preview2')?.focus());
+
+// tooltip on hover and focus
+const tip = $('tip');
+function showTip(el) {
+  if (!el.dataset.tip) return;
+  tip.textContent = el.dataset.tip; tip.hidden = false;
+  const r = el.getBoundingClientRect(), b = tip.getBoundingClientRect();
+  tip.style.top = `${r.top - b.height - 8 < 8 ? r.bottom + 8 : r.top - b.height - 8}px`;
+  tip.style.left = `${Math.min(Math.max(8, r.left + r.width / 2 - b.width / 2), innerWidth - b.width - 8)}px`;
+}
+document.addEventListener('pointerover', (e) => { const el = e.target.closest('[data-tip]'); if (el && pop.hidden) showTip(el); });
+document.addEventListener('pointerout', (e) => { if (e.target.closest('[data-tip]')) tip.hidden = true; });
+document.addEventListener('focusin', (e) => { const el = e.target.closest('[data-tip]'); if (el && pop.hidden) showTip(el); else tip.hidden = true; });
+addEventListener('scroll', () => { tip.hidden = true; if (!pop.hidden) closePop(false); }, true);
+
+// theme
+const THEMES = ['auto', 'light', 'dark'], TL = { auto: '자동', light: '밝게', dark: '어둡게' };
+let theme = 'auto';
+$('theme').addEventListener('click', () => {
+  theme = THEMES[(THEMES.indexOf(theme) + 1) % 3];
+  if (theme === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.dataset.theme = theme;
+  $('theme').textContent = `테마: ${TL[theme]}`;
+});
+
+render();
+// Loading state: the real page reads settings files and transcripts first.
+setTimeout(() => { st.loading = false; render(); }, 450);
+</script>
+</body>
+</html>
